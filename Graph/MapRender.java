@@ -1,5 +1,6 @@
 package team108.Graph;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 
 import team108.I_Debugger;
@@ -14,12 +15,14 @@ public class MapRender implements I_Debugger {
 	int width;
 	int height;
 	RobotController rc;
-	//LinkedList<MapLocation> voids = new LinkedList<MapLocation>();
+	LinkedList<MapLocation> voids = null;
 	public short[][] terrainMatrix;
+	public double[][] cowSpawnRate;
 	short[][] directAdjMatrix;
 	
 	int totalCount = 0;
 	int reuseCount = 0;
+	boolean FLAG_CollectVoids = false;
 
 	public MapRender(RobotController in) {
 		rc = in;
@@ -27,6 +30,7 @@ public class MapRender implements I_Debugger {
 		height = rc.getMapHeight();
 		terrainMatrix = new short[width][height];
 		directAdjMatrix = new short[width*height][width*height];
+		cowSpawnRate = rc.senseCowGrowth();
 		// TODO Auto-generated constructor stub
 	}
 	
@@ -86,18 +90,24 @@ public class MapRender implements I_Debugger {
 		
 		
 		/* V3 */
+		if ( FLAG_CollectVoids ) voids = new SimpleLinkedList<MapLocation>();
+		//if ( FLAG_CollectVoids ) voids = new LinkedList<MapLocation>();
 		TerrainTile t;
 		MapLocation m;
 		for ( int i = 0; i < width; i++ ) {
 			for ( int j = 0; j < height; j++ ) {
 				m = new MapLocation(i,j);
 				t = rc.senseTerrainTile(m);
-				if ( t.equals(TerrainTile.NORMAL) ) terrainMatrix[i][j] = 1;
+				if ( t.equals(TerrainTile.NORMAL) ) {
+					terrainMatrix[i][j] = 1;
+				}
 				else if ( t.equals(TerrainTile.VOID) ) {
 					terrainMatrix[i][j] = 99;
-					//voids.add(m);
+					if ( FLAG_CollectVoids ) voids.add(m);
 				}
-				else if ( t.equals(TerrainTile.ROAD) ) terrainMatrix[i][j] = 2;
+				else if ( t.equals(TerrainTile.ROAD) ) {
+					terrainMatrix[i][j] = 2;
+				}
 			}
 		}		
 		/* */
@@ -111,9 +121,172 @@ public class MapRender implements I_Debugger {
 		if ( debugLevel >= 1 ) System.out.println("[>] Map Render Complete");
 	}
 	
-	//public LinkedList<MapLocation> getVoids() {
-	//	return voids;
-	//}
+	public void blacklistEnemyBasePerimeter() {
+		MapLocation eHQ = rc.senseEnemyHQLocation();
+		MapLocation temp;
+		int x = eHQ.x;
+		int y = eHQ.y;
+		
+		// Row 1
+		temp = new MapLocation(x,y-5); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 2
+		temp = new MapLocation(x-3,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y-4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		
+		// Row 3
+		temp = new MapLocation(x-4,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y-3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 4
+		temp = new MapLocation(x-4,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y-2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 5
+		temp = new MapLocation(x-4,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y-1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		
+		// Row 6
+		temp = new MapLocation(x-5,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-4,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+5,y); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 7
+		temp = new MapLocation(x-4,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y+1); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 8
+		temp = new MapLocation(x-4,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y+2); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 9
+		temp = new MapLocation(x-4,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-3,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+4,y+3); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 10
+		temp = new MapLocation(x-3,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-2,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x-1,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+1,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+2,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+		temp = new MapLocation(x+3,y+4); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+
+		// Row 11
+		temp = new MapLocation(x,y+5); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
+	}
+	
+	public void voidPad(int padAmt) {
+		int ulX,ulY,brX,brY;
+		if ( voids == null ) {
+			if ( debugLevel >= 1 ) System.out.println("Padding the MapRender by {"+padAmt+"} using Matrix Search");
+			for ( int i = 0; i < width; i++) {
+				for ( int j = 0; j < height; j++) {
+					if ( terrainMatrix[i][j] == 99 ) {
+						MapLocation n = new MapLocation(i,j);
+						if ( debugLevel >= 3 ) System.out.println("Padding "+n.toString());
+						ulX = n.x-padAmt;
+						ulY = n.y-padAmt;
+						brX = n.x+padAmt;
+						brY = n.y+padAmt;
+						if ( ulX < 0 ) ulX = 0;
+						if ( ulY < 0 ) ulY = 0;
+						if ( brX >= width ) brX = width-1;
+						if ( brY >= height ) brY = height-1;
+						for (int i2 = ulX ; i2 <= brX; i2++) {
+							for ( int j2 = ulY; j2 <= brY; j2++) {
+								terrainMatrix[i][j] = 99;
+							}
+						}
+
+					}
+				}
+			}
+			
+		}
+		else {
+			if ( debugLevel >= 1 ) System.out.println("Padding the MapRender by {"+padAmt+"} using Voids-List");
+			for ( MapLocation n : voids ) {
+				if ( debugLevel >= 3 ) System.out.println("Padding "+n.toString());
+				ulX = n.x-padAmt;
+				ulY = n.y-padAmt;
+				brX = n.x+padAmt;
+				brY = n.y+padAmt;
+				if ( ulX < 0 ) ulX = 0;
+				if ( ulY < 0 ) ulY = 0;
+				if ( brX >= width ) brX = width-1;
+				if ( brY >= height ) brY = height-1;
+				for (int i = ulX ; i <= brX; i++) {
+					for ( int j = ulY; j <= brY; j++) {
+						terrainMatrix[i][j] = 99;
+					}
+				}
+			}
+		}
+	}
+	
+	public void setFlag_CollectVoids(boolean in) {
+		FLAG_CollectVoids = in;
+	}
+	
+	public LinkedList<MapLocation> getVoids() {
+		return voids;
+	}
 	
 	public boolean isDirectPath(MapLocation from, MapLocation to) {
 		
@@ -165,6 +338,41 @@ public class MapRender implements I_Debugger {
 	private int locationToIndex(MapLocation in) {
 		return (in.x*height)+in.y;
 	}
+
+	private static short[][] deepCopyShortMatrix(short[][] input) {
+	    if (input == null) return null;
+	    short[][] result = new short[input.length][];
+	    for (int r = 0; r < input.length; r++) {
+	        result[r] = input[r].clone();
+	    }
+	    return result;
+	}
 	
+	public MapRender clone() {
+		MapRender newRend = new MapRender(rc);
+		
+		newRend.width = width;
+		newRend.height = height;
+		
+		newRend.terrainMatrix = deepCopyShortMatrix(terrainMatrix);
+		newRend.directAdjMatrix = deepCopyShortMatrix(directAdjMatrix);		
+		if ( voids != null ) newRend.voids = (LinkedList<MapLocation>)voids.clone();
+		
+		return newRend;
+	}
+	
+	/**
+	 * Checks to see whether the specified location is on the map.  Checks only the map boundaries, does NOT take into account whether the location is a wall.
+	 * @param in	The MapLocation to check
+	 * @return
+	 */
+	public boolean locIsOnMap(MapLocation in) {
+		if ( in.x < 0 ) return false;
+		if ( in.y < 0 ) return false;
+		if ( in.x >= rc.getMapWidth() ) return false;
+		if ( in.y >= rc.getMapHeight() ) return false;
+		return true;
+	}
+
 
 }

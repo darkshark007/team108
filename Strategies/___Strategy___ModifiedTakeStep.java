@@ -8,64 +8,65 @@ import battlecode.common.Direction;
 import battlecode.common.RobotController;
 import battlecode.common.Team;
 
-public abstract class Strategy implements I_RobotStrategy {
-
+public abstract class ___Strategy___ModifiedTakeStep implements I_RobotStrategy {
+	
 	static RobotController rc;	
-
+	
 	// This is my fixed direction.  If i cannot go straight, i will go in this direction instead until i can go straight.  This direction needs to be fixed to avoid bouncing behavior.
 	// 0 == Left
 	// 1 == Right
 	int direc = 0;
 	// This variable holds the location i was prior to my last step.  I will not go back to that spot in order to avoid bouning.
+	MapLocation lastSpace;
 	final double NULL_RADIUS = 25.0;
 	int height;
 	int width;
-	MapLocation HQ;
-	MapLocation eHQ;
 
-
-	public Strategy(RobotController in) {
+	
+	public ___Strategy___ModifiedTakeStep(RobotController in) {
 		rc = in;
 		width = rc.getMapWidth();
 		height = rc.getMapHeight();
-		HQ = rc.senseHQLocation();
-		eHQ = rc.senseEnemyHQLocation();
+		lastSpace = rc.senseHQLocation();
 	}
 
 	public abstract void run();
 
-
+	
 	/* New version - Optimized for navigation around obstacles
 	public void takeStepTowards(MapLocation in) throws GameActionException {
 
 	}	
 	/* */
-
+	
 	/**
 	 * Take a single step towards the specified location.  This method does NOT take into account whether the robot is able to move, and if it is called and the robot is unable to move an exception will occur.
 	 * @param in	The location to move towards.
 	 * @throws GameActionException	If the robot is unable to move (for example, if it has already moved) then this exception will be thrown.
 	 */
-	// MODIFIED AND REMOVED THE LAST-SPACE CLAUSE.
+	/* OLD VERSION */
 	public Direction takeStepTowards(MapLocation in) throws GameActionException {
-
+		
 		// Check Straight
 		//rc.setIndicatorString(2, "Direc: "+direc);
 		MapLocation myLoc = rc.getLocation();
 		if ( debugLevel >= 2 ) System.out.print("Taking Step towards:  ("+in.x+","+in.y+")  from  ("+myLoc.x+","+myLoc.y+")");
-
+		
 		Direction dirS = myLoc.directionTo(in);
-
+		
 		// See if i can move straight		
 		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirS) ) {
-			rc.move(dirS);
-			if ( debugLevel >= 2 ) System.out.println("    By going STRAIGHT");
-			return dirS;	
+			if ( !myLoc.add(dirS).equals(lastSpace) ) {
+				rc.move(dirS);
+				lastSpace = myLoc;
+				if ( debugLevel >= 2 ) System.out.println("    By going STRAIGHT");
+				return dirS;	
+			}
 		}
-
+		
 		// Either there is a robot in the way, or there is a mine.
 		// See if i can move 45 degrees left of straight
 		Direction dirL = dirS.rotateLeft();
@@ -73,12 +74,14 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirL) ) {
+			//if ( !myLoc.add(dirL).equals(lastSpace) ) { direc = 1-direc; }
 			rc.move(dirL);
 			if ( debugLevel >= 2 ) System.out.println("    By going LEFT");
+			lastSpace = myLoc;
 			return dirL;				
 
 		}
-
+		
 		// Either there is a robot in the way, or there is a mine.
 		// See if i can move 45 degrees right of straight
 		Direction dirR = dirS.rotateRight();
@@ -86,7 +89,9 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirR) ) {
+			//if ( !myLoc.add(dirR).equals(lastSpace) ) { direc = 1-direc; }
 			rc.move(dirR);
+			lastSpace = myLoc;
 			if ( debugLevel >= 2 ) System.out.println("    By going RIGHT");				
 			return dirR;				
 
@@ -100,7 +105,7 @@ public abstract class Strategy implements I_RobotStrategy {
 		Direction dirLLL = dirLL.rotateLeft();
 		Direction dirRR = dirR.rotateRight();
 		Direction dirRRR = dirRR.rotateRight();
-
+		
 		// Check 90 degrees in my fixed direction
 		if ( direc == 0 ) dirS = dirLL;
 		else  dirS = dirRR;
@@ -108,12 +113,16 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirS) ) {
-			rc.move(dirS);
-			if ( debugLevel >= 2 ) {
-				if ( direc == 0 ) System.out.println("    By going L,LEFT");
-				else System.out.println("    By going R,RIGHT");
+			if ( !myLoc.add(dirS).equals(lastSpace) ) {
+				if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
+				rc.move(dirS);
+				lastSpace = myLoc;
+				if ( debugLevel >= 2 ) {
+					if ( direc == 0 ) System.out.println("    By going L,LEFT");
+					else System.out.println("    By going R,RIGHT");
+				}
+				return dirS;				
 			}
-			return dirS;				
 		}
 
 		// Check 135 degrees in my fixed direction
@@ -123,18 +132,22 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirS) ) {
-			rc.move(dirS);
-			if ( debugLevel >= 2 ) {
-				if ( direc == 0 ) System.out.println("    By going L,L,LEFT");
-				else System.out.println("    By going R,R,RIGHT");
+			if ( !myLoc.add(dirS).equals(lastSpace) ) {
+				if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
+				rc.move(dirS);
+				lastSpace = myLoc;
+				if ( debugLevel >= 2 ) {
+					if ( direc == 0 ) System.out.println("    By going L,L,LEFT");
+					else System.out.println("    By going R,R,RIGHT");
+				}
+				return dirS;				
 			}
-			return dirS;				
 		}
 
 		// If that direction did not work, swap my direction and try that way.
 		direc = 1-direc; // Because direc is initialized at 0, this will always bounce it between 1 and 0
-
-
+		
+		
 		// Check 90 degrees in my new fixed direction
 		if ( direc == 0 ) dirS = dirLL;
 		else  dirS = dirRR;
@@ -142,13 +155,16 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirS) ) {
-			//if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
-			rc.move(dirS);
-			if ( debugLevel >= 2 ) {
-				if ( direc == 0 ) System.out.println("    By going L,LEFT");
-				else System.out.println("    By going R,RIGHT");
+			if ( !myLoc.add(dirS).equals(lastSpace) ) {
+				//if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
+				rc.move(dirS);
+				lastSpace = myLoc;
+				if ( debugLevel >= 2 ) {
+					if ( direc == 0 ) System.out.println("    By going L,LEFT");
+					else System.out.println("    By going R,RIGHT");
+				}
+				return dirS;				
 			}
-			return dirS;				
 		}
 
 		// Check 135 degrees in my fixed direction
@@ -158,12 +174,16 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirS) ) {
-			rc.move(dirS);
-			if ( debugLevel >= 2 ) {
-				if ( direc == 0 ) System.out.println("    By going L,L,LEFT");
-				else System.out.println("    By going R,R,RIGHT");
+			if ( !myLoc.add(dirS).equals(lastSpace) ) {
+				//if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
+				rc.move(dirS);
+				lastSpace = myLoc;
+				if ( debugLevel >= 2 ) {
+					if ( direc == 0 ) System.out.println("    By going L,L,LEFT");
+					else System.out.println("    By going R,R,RIGHT");
+				}
+				return dirS;				
 			}
-			return dirS;				
 		}
 		/* */
 
@@ -172,16 +192,21 @@ public abstract class Strategy implements I_RobotStrategy {
 			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
 		}
 		else if ( rc.canMove(dirS) ) {
-			rc.move(dirS);
-			if ( debugLevel >= 2 ) System.out.println("    By going Back");
-			return dirS;				
+			if ( !myLoc.add(dirS).equals(lastSpace) ) {
+				if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
+				rc.move(dirS);
+				lastSpace = myLoc;
+				if ( debugLevel >= 2 ) System.out.println("    By going Back");
+				return dirS;				
+			}
 		}
 
+		
 		if ( debugLevel >= 2 ) System.out.println("    But i couldn't find a path :(");
 		return null;
 	}
 	/* */
-
+	
 
 	/**
 	 * Moves the robot to the specified location.  Ensure that the destination is reachable before calling this method, as control of the robot is taken by this method until it reaches its destination
@@ -201,11 +226,11 @@ public abstract class Strategy implements I_RobotStrategy {
 		}
 	}
 
-
+	
 	public void followPath(Path in) throws GameActionException {
 		int path = 0;
 		if ( rc.getLocation().equals(in.getLink(0)) ) path = 1;
-
+		
 		MapLocation nextLink;
 		Direction dir;
 		while ( true ) {
@@ -215,15 +240,15 @@ public abstract class Strategy implements I_RobotStrategy {
 
 				dir = rc.getLocation().directionTo(nextLink);
 
-
+				
 				while ( !rc.canMove(dir) ) rc.yield();
 				rc.move(dir);
 			}
 		}
 
-
+		
 	}
-
+	
 
 	/**
 	 * Checks to see whether the specified location is on the map.  Checks only the map boundaries, does NOT take into account whether the location is a wall.
@@ -237,7 +262,7 @@ public abstract class Strategy implements I_RobotStrategy {
 		if ( in.y >= rc.getMapHeight() ) return false;
 		return true;
 	}
-
+	
 	public static int locToInt(MapLocation m) {
 		return (m.x*100 + m.y);
 	}
@@ -245,7 +270,7 @@ public abstract class Strategy implements I_RobotStrategy {
 	public static MapLocation intToLoc(int i) {
 		return new MapLocation(i/100,i%100);
 	}
-
+	
 	/**
 	 * 
 	 * 
@@ -265,9 +290,9 @@ public abstract class Strategy implements I_RobotStrategy {
 				closestLoc = m;
 			}
 		}
-
+		
 		return closestLoc;
 	}
 
-
+	
 }

@@ -19,10 +19,17 @@ public class DepthFirstPathing extends PathGenerator {
 		// TODO Auto-generated constructor stub
 	}
 
+	public DepthFirstPathing(RobotController rc, MapRender r) {
+		super(rc,r);
+		// TODO Auto-generated constructor stub
+	}
+
 	@Override
 	public Path getPath(MapLocation from, MapLocation to) {
 		
 		if ( mren == null ) mren = new MapRender(rc);
+		
+		if ( mren.terrainMatrix[to.x][to.y] == 99 ) return null;
 		
 		Stack<MapLocation> queue = new Stack<MapLocation>();
 		boolean[] visited = new boolean[width*height];

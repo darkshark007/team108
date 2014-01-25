@@ -17,6 +17,10 @@ public class ObstaclePointPathGenerator extends PathGenerator {
 		super(in);
 	}
 	
+	public ObstaclePointPathGenerator(RobotController in, MapRender mren) {
+		super(in,mren);
+	}
+
 	public void init() {
 		if ( opArray == null ) init_getObstaclePointArray();
 
@@ -253,6 +257,7 @@ public class ObstaclePointPathGenerator extends PathGenerator {
 		// Perform Dijkstra's Algorithm on this simplified graph
 		
 		int[] path = tG.getShortestPathUsingDijkstras(size, size+1);
+		if ( path == null ) return null;
 		
 		Path p = new Path();
 		p.addLink(to);

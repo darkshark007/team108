@@ -7,10 +7,10 @@ import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
 
-public class NoiseTower_MaximumCowsPerPathGreedyFromCenterStrategy extends Orders {
+public class ___NV___NoiseTower_MaximumCowsPerPathDepthFirstStrategy extends Orders {
 
 	
-	public NoiseTower_MaximumCowsPerPathGreedyFromCenterStrategy(RobotController in) { super(in); }
+	public ___NV___NoiseTower_MaximumCowsPerPathDepthFirstStrategy(RobotController in) { super(in); }
 
 	@Override
 	public void executeOrders() throws GameActionException {
@@ -20,7 +20,7 @@ public class NoiseTower_MaximumCowsPerPathGreedyFromCenterStrategy extends Order
 		
 		targetLoc = new MapLocation(dX,dY);
 		if ( debugLevel >= 2 ) System.out.println("[OO]  M: "+myLoc.toString()+"\tT: "+targetLoc.toString()+"\tD: "+myLoc.distanceSquaredTo(targetLoc));
-		rc.attackSquareLight(targetLoc);		
+		rc.attackSquare(targetLoc);		
 	}
 	
 	private LinkedList<MapLocation> getFurtherAdjacentPoints(MapLocation start) {

@@ -7,33 +7,48 @@ import team108.Graph.MapRender;
 import team108.Graph.SimpleLinkedList;
 import team108.Orders.*;
 import team108.Path.DepthFirstPathing;
+import team108.Path.DirectWithOptimizedBuggingPathGenerator;
 import team108.Path.ObstaclePointPathGenerator;
 import team108.Path.Path;
 import team108.Path.PathGenerator;
+import team108.Strategies.PassiveHerdingStrategy.CowLocation;
 import battlecode.common.Clock;
 import battlecode.common.Direction;
 import battlecode.common.GameActionException;
 import battlecode.common.GameConstants;
+import battlecode.common.GameObject;
 import battlecode.common.MapLocation;
 import battlecode.common.Robot;
 import battlecode.common.RobotController;
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
+import battlecode.common.TerrainTile;
 
-public class HardFormationSwarmStrategy extends Strategy {
+public class HardFormationSwarmStrategyV2 extends Strategy {
 
 	final static int BC_SWARM_COUNT			= 0;
-	final static int BC_SWARM_ID			= 1;
+	final static int BC_SWARM_FORM_COUNT	= 1;
+	final static int BC_SWARM_FORM_COUNTER	= 15;
+	final static int BC_SWARM_ID			= 2;
 	final static int BC_SWARM_DIR			= 3;
-	final static int BC_SWARM_LEAD_LOC		= 2;
-	final static int BC_ORDERS_ID			= 4;
-	final static int BC_ORDERS_PATH_CHAN	= 5;
-	final static int BC_ATTACK_ADJ			= 6;
-	final static int BC_ATTACK_FLAG			= 7;
-	final static int BC_RALLY_POINT			= 8;
-	final static int BC_SCATTER_FLAG		= 9;
-	final static int BC_PASTR_TARGET		= 10;
-	final static int BC_SPAWN_LOCATION		= 11;
+	final static int BC_SWARM_LEAD_LOC		= 4;
+	final static int BC_ORDERS_ID			= 5;
+	final static int BC_ORDERS_PATH_CHAN	= 6;
+	final static int BC_ORDERS_PASTR_TARGET	= 7;
+	final static int BC_ORDERS_NOISE_TARGET	= 8;	
+	final static int BC_ORDERS_MANIC_TARGET	= 9;	
+	final static int BC_ATTACK_ADJ			= 10;
+	final static int BC_ATTACK_FLAG			= 11;
+	final static int BC_RALLY_POINT			= 12;
+	final static int BC_SCATTER_FLAG		= 13;
+	//final static int BC_PASTR_TARGET		= 73;
+	final static int BC_SPAWN_LOCATION		= 14;
+	final static int BC_PASTR_SPAWN			= 16;
+	final static int BC_DISTRESS_ACTIVE		= 17;
+	final static int BC_DISTRESS_PENDING	= 18;
+	final static int BC_ORDERS_FLEE			= 19;
+	final static int BC_ALT_RALLY			= 20;
+	final static int BC_ALT_USE				= 21;
 	final static int BC_PASTR_ID			= 74;
 	final static int BC_PASTR_LIST			= 75;
 	
@@ -48,6 +63,9 @@ public class HardFormationSwarmStrategy extends Strategy {
 	MapLocation myLoc = null;
 	MapLocation formLoc = null;
 	Direction dir = null;
+	CowLocation nextLoc = null;
+	final int distressTurnLife = 25;
+
 
 	
 	// Enemy scan stuff
@@ -58,10 +76,13 @@ public class HardFormationSwarmStrategy extends Strategy {
 
 	
 	
-	public HardFormationSwarmStrategy(RobotController in) { super(in); }
+	public HardFormationSwarmStrategyV2(RobotController in) { super(in); }
 
 	public void run() {
 		try {
+			
+			myLoc = rc.getLocation();
+			
 			switch (rc.getType()) {
 			case HQ:
 				// Find Spawn direction
@@ -74,6 +95,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 				rc.broadcast(BC_SWARM_ID, 1);
 				rc.broadcast(BC_RALLY_POINT, -1);
 				rc.broadcast(BC_ORDERS_ID, 1);
+				rc.broadcast(BC_PASTR_SPAWN, 85);
 				rc.broadcast(BC_SPAWN_LOCATION, locToInt(myLoc.add(dir)));
 				int pathChan = 300;
 				rc.broadcast(BC_ORDERS_PATH_CHAN, pathChan);
@@ -84,7 +106,6 @@ public class HardFormationSwarmStrategy extends Strategy {
 				int herdBotCount = 0;
 				int[] herdBotLocs  = new int[25];
 				int[] herdBotTypes = new int[25];
-				CowLocation nextLoc = null;
 
 				
 				
@@ -95,9 +116,9 @@ public class HardFormationSwarmStrategy extends Strategy {
 				
 				// Initialize the Path Generators
 				MapRender mren = new MapRender(rc);
-				mren.blacklistEnemyBasePerimeter();
 				mren.setFlag_CollectVoids(true);
 				mren.init();
+				mren.blacklistEnemyBasePerimeter();
 				PathGenerator wgr, gr = new DepthFirstPathing(rc,mren);
 				double voidDensity = (((double)(mren.getVoids().size()))/((double)(rc.getMapWidth()*rc.getMapHeight())));
 				if ( debugLevel >= 1 ) System.out.println("Void Density:  "+voidDensity);
@@ -114,8 +135,12 @@ public class HardFormationSwarmStrategy extends Strategy {
 					wgr = new DepthFirstPathing(rc,mren.clone());
 					wgr.getMapRender().voidPad(1);
 				}
+				if ( debugLevel >= 2 ) wgr.getMapRender().printMap();
 				
-				rc.broadcast(BC_RALLY_POINT, locToInt(getRallyPoint(wgr.getMapRender())));
+				MapLocation rallyPoint;
+				rallyPoint = getRallyPoint(wgr.getMapRender());
+				if ( rallyPoint == null ) rallyPoint = getRallyPoint(gr.getMapRender());
+				rc.broadcast(BC_RALLY_POINT, locToInt(rallyPoint));
 				if ( debugLevel >= 1 ) System.out.println("HQ Initialization Complete");				
 				
 				while ( true ) { 
@@ -125,6 +150,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 					rc.broadcast(BC_SWARM_ID, 1);
 					continueFlag = false;
 					if ( rc.readBroadcast(BC_SCATTER_FLAG) == 1 ) rc.broadcast(BC_SCATTER_FLAG, 0);
+					
 
 
 					// Check the status of the Pastrs
@@ -132,7 +158,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 					for ( int i = 0; i < herdBotCount; i++ ) {
 						if ( rc.readBroadcast(BC_PASTR_LIST+i) == 0 ) {
 							replaceMe = i;
-							//break;
+							break;
 						}
 						else { rc.broadcast(BC_PASTR_LIST+i,rc.readBroadcast(BC_PASTR_LIST+i)-1); }
 					}
@@ -164,199 +190,19 @@ public class HardFormationSwarmStrategy extends Strategy {
 						//   3 = Noise Tower
 						// TODO PUT IN A CASE to replace lost towers
 						if ( replaceMe != -1 ) {
+							if ( debugLevel >= 1 ) System.out.println(">> SPAWNING BOT:  Replacement for PastrID "+replaceMe);
 							// Need to replace a Pastr or a Noise Tower.
 							rc.broadcast(BC_PASTR_ID, replaceMe);
 							rc.broadcast(BC_ORDERS_ID, herdBotTypes[replaceMe]);
-							rc.broadcast(BC_PASTR_TARGET, herdBotLocs[replaceMe]);
+							if ( herdBotTypes[replaceMe] == 2 ) rc.broadcast(BC_ORDERS_PASTR_TARGET, herdBotLocs[replaceMe]);
+							if ( herdBotTypes[replaceMe] == 3 ) rc.broadcast(BC_ORDERS_NOISE_TARGET, herdBotLocs[replaceMe]);
+							if ( herdBotTypes[replaceMe] == 4 ) rc.broadcast(BC_ORDERS_MANIC_TARGET, herdBotLocs[replaceMe]);
+							
 							continueFlag = true;
 							postPathToPathChannel(gr.getPath(myLoc.add(dir),intToLoc(herdBotLocs[replaceMe])),pathChan-100);
 						}
-						else if ( Clock.getRoundNum() > 250 && herdBotCount < 2 && rc.readBroadcast(BC_SWARM_COUNT) >= 6 ) {
-							if ( herdBotCount == 0 ) {
-								nextLoc = cowLocs.remove();
-								// Spawn a Noise Tower
-								rc.broadcast(BC_PASTR_ID, herdBotCount);
-								herdBotTypes[herdBotCount] = 3;
-								herdBotLocs[herdBotCount] = locToInt(nextLoc.loc);
-								rc.broadcast(BC_ORDERS_ID, 3);
-								rc.broadcast(herdBotLocs[herdBotCount]+4000,herdBotCount);
-								herdBotCount++;
-								continueFlag = true;
-								postPathToPathChannel(gr.getPath(myLoc.add(dir),nextLoc.loc),pathChan-100);
-							}
-							else if ( herdBotCount == 1 ) {
-								// Decide which location to build the Pastr in, there are 8 options.
-								MapLocation tempLoc = null;
-								MapLocation eHQ = rc.senseEnemyHQLocation();
-								double tempDist = 0;
-								MapLocation m1 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y-1);	if ( !locIsOnMap(m1) ) m1 = eHQ;	if ( mren.terrainMatrix[m1.x][m1.y] == 99 ) m1 = eHQ;	
-								MapLocation m2 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y);	if ( !locIsOnMap(m2) ) m2 = eHQ;	if ( mren.terrainMatrix[m2.x][m2.y] == 99 ) m2 = eHQ;
-								MapLocation m3 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y+1);	if ( !locIsOnMap(m3) ) m3 = eHQ;	if ( mren.terrainMatrix[m3.x][m3.y] == 99 ) m3 = eHQ;
-								MapLocation m4 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y+1);	if ( !locIsOnMap(m4) ) m4 = eHQ;	if ( mren.terrainMatrix[m4.x][m4.y] == 99 ) m4 = eHQ;
-								MapLocation m5 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y+1);	if ( !locIsOnMap(m5) ) m5 = eHQ;	if ( mren.terrainMatrix[m5.x][m5.y] == 99 ) m5 = eHQ;
-								MapLocation m6 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y);	if ( !locIsOnMap(m6) ) m6 = eHQ;	if ( mren.terrainMatrix[m6.x][m6.y] == 99 ) m6 = eHQ;
-								MapLocation m7 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y-1);	if ( !locIsOnMap(m7) ) m7 = eHQ;	if ( mren.terrainMatrix[m7.x][m7.y] == 99 ) m7 = eHQ;
-								MapLocation m8 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y-1);	if ( !locIsOnMap(m8) ) m8 = eHQ;	if ( mren.terrainMatrix[m8.x][m8.y] == 99 ) m8 = eHQ;
-								
-								// Choose the one farthest from the EHQ.
-								if ( m1.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m1; tempDist = m1.distanceSquaredTo(eHQ); }
-								if ( m2.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m2; tempDist = m2.distanceSquaredTo(eHQ); }
-								if ( m3.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m3; tempDist = m3.distanceSquaredTo(eHQ); }
-								if ( m4.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m4; tempDist = m4.distanceSquaredTo(eHQ); }
-								if ( m5.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m5; tempDist = m5.distanceSquaredTo(eHQ); }
-								if ( m6.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m6; tempDist = m6.distanceSquaredTo(eHQ); }
-								if ( m7.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m7; tempDist = m7.distanceSquaredTo(eHQ); }
-								if ( m8.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m8; tempDist = m8.distanceSquaredTo(eHQ); }
-								
-								// Spawn a Pastr
-								rc.broadcast(BC_PASTR_ID, herdBotCount);
-								herdBotTypes[herdBotCount] = 2;
-								herdBotLocs[herdBotCount] = locToInt(tempLoc);
-								rc.broadcast(BC_ORDERS_ID, 2);
-								rc.broadcast(BC_PASTR_TARGET, herdBotLocs[herdBotCount]);
-								rc.broadcast(herdBotLocs[herdBotCount]+4000,herdBotCount);
-								herdBotCount++;
-								continueFlag = true;
-								postPathToPathChannel(gr.getPath(myLoc.add(dir),tempLoc),pathChan-100);
-							}
-						}
-						/* One Noise Tower
-						else if ( Clock.getRoundNum() > 400 && herdBotCount < 4 && rc.readBroadcast(BC_SWARM_COUNT) >= 6 ) {
-							if ( herdBotCount == 2 ) {
-								if ( cowLocs.isEmpty() ) {
-									rc.broadcast(BC_ORDERS_ID, 1);
-									herdBotCount = 10;
-								}
-								else {
-									// Get the location of the next NT
-									boolean badLocation;
-									do {
-										badLocation = false;
-										nextLoc = cowLocs.remove();
-										
-										for ( int i = 0; i < herdBotCount; i++) {
-											if ( nextLoc.loc.distanceSquaredTo(intToLoc(herdBotLocs[i])) < 200 ) {
-												badLocation = true;
-											}
-										}
-									} while ( !cowLocs.isEmpty() && badLocation );
-									// Spawn a Noise Tower
-									rc.broadcast(BC_PASTR_ID, herdBotCount);
-									herdBotTypes[herdBotCount] = 3;
-									herdBotLocs[herdBotCount] = locToInt(nextLoc.loc);
-									rc.broadcast(BC_ORDERS_ID, 3);
-									rc.broadcast(BC_PASTR_TARGET, herdBotLocs[herdBotCount]);
-									rc.broadcast(herdBotLocs[herdBotCount]+4000,herdBotCount);
-									herdBotCount++;
-									continueFlag = true;
-									postPathToPathChannel(gr.getPath(myLoc.add(dir),nextLoc.loc),pathChan-100);
-								}
-							}
-							else if ( herdBotCount == 3 ) {
-								// Decide which location to build the Pastr in, there are 8 options.
-								MapLocation tempLoc = null;
-								MapLocation eHQ = rc.senseEnemyHQLocation();
-								double tempDist = 0;
-								MapLocation m1 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y-1);	if ( !locIsOnMap(m1) ) m1 = eHQ;	if ( mren.terrainMatrix[m1.x][m1.y] == 99 ) m1 = eHQ;	
-								MapLocation m2 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y);	if ( !locIsOnMap(m2) ) m2 = eHQ;	if ( mren.terrainMatrix[m2.x][m2.y] == 99 ) m2 = eHQ;
-								MapLocation m3 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y+1);	if ( !locIsOnMap(m3) ) m3 = eHQ;	if ( mren.terrainMatrix[m3.x][m3.y] == 99 ) m3 = eHQ;
-								MapLocation m4 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y+1);	if ( !locIsOnMap(m4) ) m4 = eHQ;	if ( mren.terrainMatrix[m4.x][m4.y] == 99 ) m4 = eHQ;
-								MapLocation m5 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y+1);	if ( !locIsOnMap(m5) ) m5 = eHQ;	if ( mren.terrainMatrix[m5.x][m5.y] == 99 ) m5 = eHQ;
-								MapLocation m6 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y);	if ( !locIsOnMap(m6) ) m6 = eHQ;	if ( mren.terrainMatrix[m6.x][m6.y] == 99 ) m6 = eHQ;
-								MapLocation m7 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y-1);	if ( !locIsOnMap(m7) ) m7 = eHQ;	if ( mren.terrainMatrix[m7.x][m7.y] == 99 ) m7 = eHQ;
-								MapLocation m8 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y-1);	if ( !locIsOnMap(m8) ) m8 = eHQ;	if ( mren.terrainMatrix[m8.x][m8.y] == 99 ) m8 = eHQ;
-								
-								// Choose the one farthest from the EHQ.
-								if ( m1.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m1; tempDist = m1.distanceSquaredTo(eHQ); }
-								if ( m2.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m2; tempDist = m2.distanceSquaredTo(eHQ); }
-								if ( m3.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m3; tempDist = m3.distanceSquaredTo(eHQ); }
-								if ( m4.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m4; tempDist = m4.distanceSquaredTo(eHQ); }
-								if ( m5.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m5; tempDist = m5.distanceSquaredTo(eHQ); }
-								if ( m6.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m6; tempDist = m6.distanceSquaredTo(eHQ); }
-								if ( m7.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m7; tempDist = m7.distanceSquaredTo(eHQ); }
-								if ( m8.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m8; tempDist = m8.distanceSquaredTo(eHQ); }
-								
-								// Spawn a Pastr
-								rc.broadcast(BC_PASTR_ID, herdBotCount);
-								herdBotTypes[herdBotCount] = 2;
-								herdBotLocs[herdBotCount] = locToInt(tempLoc);
-								rc.broadcast(BC_ORDERS_ID, 2);
-								rc.broadcast(BC_PASTR_TARGET, herdBotLocs[herdBotCount]);
-								rc.broadcast(herdBotLocs[herdBotCount]+4000,herdBotCount);
-								herdBotCount++;
-								continueFlag = true;
-								postPathToPathChannel(gr.getPath(myLoc.add(dir),tempLoc),pathChan-100);
-							}
-						}
-						else if ( Clock.getRoundNum() > 600 && herdBotCount < 6 && rc.readBroadcast(BC_SWARM_COUNT) >= 6 ) {
-							if ( herdBotCount == 4 ) {
-								if ( cowLocs.isEmpty() ) {
-									rc.broadcast(BC_ORDERS_ID, 1);
-									herdBotCount = 10;
-								}
-								else {
-									// Get the location of the next NT
-									boolean badLocation;
-									do {
-										badLocation = false;
-										nextLoc = cowLocs.remove();
-										
-										for ( int i = 0; i < herdBotCount; i++) {
-											if ( nextLoc.loc.distanceSquaredTo(intToLoc(herdBotLocs[i])) < 200 ) {
-												badLocation = true;
-											}
-										}
-									} while ( !cowLocs.isEmpty() && badLocation );
-									// Spawn a Noise Tower
-									rc.broadcast(BC_PASTR_ID, herdBotCount);
-									herdBotTypes[herdBotCount] = 3;
-									herdBotLocs[herdBotCount] = locToInt(nextLoc.loc);
-									rc.broadcast(BC_ORDERS_ID, 3);
-									rc.broadcast(BC_PASTR_TARGET, herdBotLocs[herdBotCount]);
-									rc.broadcast(herdBotLocs[herdBotCount]+4000,herdBotCount);
-									herdBotCount++;
-									continueFlag = true;
-									postPathToPathChannel(gr.getPath(myLoc.add(dir),nextLoc.loc),pathChan-100);
-								}
-							}
-							else if ( herdBotCount == 5 ) {
-								// Decide which location to build the Pastr in, there are 8 options.
-								MapLocation tempLoc = null;
-								MapLocation eHQ = rc.senseEnemyHQLocation();
-								double tempDist = 0;
-								MapLocation m1 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y-1);	if ( !locIsOnMap(m1) ) m1 = eHQ;	if ( mren.terrainMatrix[m1.x][m1.y] == 99 ) m1 = eHQ;	
-								MapLocation m2 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y);	if ( !locIsOnMap(m2) ) m2 = eHQ;	if ( mren.terrainMatrix[m2.x][m2.y] == 99 ) m2 = eHQ;
-								MapLocation m3 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y+1);	if ( !locIsOnMap(m3) ) m3 = eHQ;	if ( mren.terrainMatrix[m3.x][m3.y] == 99 ) m3 = eHQ;
-								MapLocation m4 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y+1);	if ( !locIsOnMap(m4) ) m4 = eHQ;	if ( mren.terrainMatrix[m4.x][m4.y] == 99 ) m4 = eHQ;
-								MapLocation m5 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y+1);	if ( !locIsOnMap(m5) ) m5 = eHQ;	if ( mren.terrainMatrix[m5.x][m5.y] == 99 ) m5 = eHQ;
-								MapLocation m6 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y);	if ( !locIsOnMap(m6) ) m6 = eHQ;	if ( mren.terrainMatrix[m6.x][m6.y] == 99 ) m6 = eHQ;
-								MapLocation m7 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y-1);	if ( !locIsOnMap(m7) ) m7 = eHQ;	if ( mren.terrainMatrix[m7.x][m7.y] == 99 ) m7 = eHQ;
-								MapLocation m8 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y-1);	if ( !locIsOnMap(m8) ) m8 = eHQ;	if ( mren.terrainMatrix[m8.x][m8.y] == 99 ) m8 = eHQ;
-								
-								// Choose the one farthest from the EHQ.
-								if ( m1.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m1; tempDist = m1.distanceSquaredTo(eHQ); }
-								if ( m2.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m2; tempDist = m2.distanceSquaredTo(eHQ); }
-								if ( m3.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m3; tempDist = m3.distanceSquaredTo(eHQ); }
-								if ( m4.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m4; tempDist = m4.distanceSquaredTo(eHQ); }
-								if ( m5.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m5; tempDist = m5.distanceSquaredTo(eHQ); }
-								if ( m6.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m6; tempDist = m6.distanceSquaredTo(eHQ); }
-								if ( m7.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m7; tempDist = m7.distanceSquaredTo(eHQ); }
-								if ( m8.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m8; tempDist = m8.distanceSquaredTo(eHQ); }
-								
-								// Spawn a Pastr
-								rc.broadcast(BC_PASTR_ID, herdBotCount);
-								herdBotTypes[herdBotCount] = 2;
-								herdBotLocs[herdBotCount] = locToInt(tempLoc);
-								rc.broadcast(BC_ORDERS_ID, 2);
-								rc.broadcast(BC_PASTR_TARGET, herdBotLocs[herdBotCount]);
-								rc.broadcast(herdBotLocs[herdBotCount]+4000,herdBotCount);
-								herdBotCount++;
-								continueFlag = true;
-								postPathToPathChannel(gr.getPath(myLoc.add(dir),tempLoc),pathChan-100);
-							}
-						}
-						/* */
 						else {
+							if ( debugLevel >= 1 ) System.out.println(">> SPAWNING BOT:  Soldier");
 							rc.broadcast(BC_ORDERS_ID, 1);						
 						}
 					} 
@@ -394,11 +240,47 @@ public class HardFormationSwarmStrategy extends Strategy {
 
 					
 					
-					// DATA POST-PROCESSING					
+					// DATA POST-PROCESSING	
+					if ( Clock.getRoundNum() > 500 && nextLoc == null ) {
+						setUpNewPastr(gr.getMapRender());
+						
+						herdBotCount += 3;
+						
+						continueFlag = true;
+						rc.yield();
+						
+						herdBotLocs[0] = rc.readBroadcast(BC_ORDERS_NOISE_TARGET);
+						herdBotLocs[1] = rc.readBroadcast(BC_ORDERS_PASTR_TARGET);
+						herdBotLocs[2] = rc.readBroadcast(BC_ORDERS_MANIC_TARGET);
+						
+						herdBotTypes[0] = 3;
+						herdBotTypes[1] = 2;
+						herdBotTypes[2] = 4;
+						
+					}
 					if ( processingCowLocations ) {
 						// Process cow spawn locations, looking for good spots to build a Noise Tower
 						continueFlag = true;
 						processCowGrowthLocations(gr.getMapRender());
+					}
+					else {
+						if ( rc.readBroadcast(BC_SWARM_COUNT) > 6 && nextLoc == null ) {
+							setUpNewPastr(gr.getMapRender());
+							
+							herdBotCount += 3;
+							
+							continueFlag = true;
+							rc.yield();
+							
+							herdBotLocs[0] = rc.readBroadcast(BC_ORDERS_NOISE_TARGET);
+							herdBotLocs[1] = rc.readBroadcast(BC_ORDERS_PASTR_TARGET);
+							herdBotLocs[2] = rc.readBroadcast(BC_ORDERS_MANIC_TARGET);
+							
+							herdBotTypes[0] = 3;
+							herdBotTypes[1] = 2;
+							herdBotTypes[2] = 4;
+							
+						}
 					}
 					
 					if ( continueFlag ) continue;
@@ -425,25 +307,55 @@ public class HardFormationSwarmStrategy extends Strategy {
 					runDefender_NoiseTower();
 
 					
+				case 4: // Manic_Bot
+					runDefender_ManicBot();
+
+					
 				}
 				
 				
 			case NOISETOWER:
 				// Working
 				//I_Orders orders = new NoiseTower_CircularSweepUsingRadiusAndAngle(rc);
+				int myPastrID = rc.readBroadcast(locToInt(rc.getLocation())+4000);
+				myLoc = rc.getLocation();
+				if ( debugLevel >= 1 ) {
+					System.out.println("[+] My Orders: "+2+"\tMyPastrID: "+myPastrID+"\tMyPastr: "+myLoc);
+					rc.setIndicatorString(1, "My Orders: "+2+"     MyPastrID: "+myPastrID+"     MyPastr: "+myLoc);
+				}
 				
 				// Testing
-				//I_Orders orders = new NoiseTower_CircularSweepUsingFarthestPointPrediction(rc);
-				I_Orders orders = new NoiseTower_DepthFirstPathGenerator(rc);
+				rc.broadcast(BC_PASTR_LIST+myPastrID, 25);
 				
-				int myPastrID = rc.readBroadcast(locToInt(rc.getLocation())+4000);
+				//I_Orders orders = new NoiseTower_CircularSweepUsingFarthestPointPrediction(rc);
+				//NoiseTower ord = new NoiseTower_WillsNoiseTower(rc);
+				NoiseTower ord = new NoiseTower_CircularSweepUsingRadiusAndAngle(rc);
+				NoiseTower_DepthFirstPathGenerator ord2 = new NoiseTower_DepthFirstPathGenerator(rc);
+				
 				//I_Orders orders = new NoiseTower_DiagonalCrossSweepUsingRadiusAndAngle();
 				while ( true ) {
-					if ( rc.isActive() ) {
-						rc.broadcast(BC_PASTR_LIST+myPastrID, 6);
-						orders.executeOrders();
+					rc.broadcast(BC_PASTR_LIST+myPastrID, 6);
+
+					rc.broadcast(BC_PASTR_SPAWN, ord.getTurnsTillConvergence());
+					
+					
+					// Check for Distress Signal
+					Robot closestTarget = getClosestEnemyTarget();
+					if ( closestTarget != null ) {
+						// Send out a distress call
+						sendDistressCall(50,rc.senseRobotInfo(closestTarget).location.distanceSquaredTo(myLoc),myLoc);
 					}
-					rc.yield();
+
+					
+					if ( rc.isActive() ) ord.executeOrders();
+					// Handle the data processing.
+					int sTurn = Clock.getRoundNum();
+					if ( debugLevel >= 3 ) System.out.println("Density:  "+ord2.getPathDensity());
+					if ( ord2.getPathDensity() < 0.5 ) {
+						ord = ord2;
+					}
+					ord2.processData(); 
+					if ( sTurn == Clock.getRoundNum() ) rc.yield();
 				}
 
 				
@@ -463,7 +375,14 @@ public class HardFormationSwarmStrategy extends Strategy {
 							postPathToPathChannel(gr.getPath(from,to),i);
 						}
 					}
-					//rc.yield();
+					
+					// Check for Distress Signal
+					Robot closestTarget = getClosestEnemyTarget();
+					if ( closestTarget != null ) {
+						// Send out a distress call
+						sendDistressCall(80,rc.senseRobotInfo(closestTarget).location.distanceSquaredTo(myLoc),myLoc);
+					}
+					rc.yield();
 				}
 
 			default:
@@ -475,17 +394,230 @@ public class HardFormationSwarmStrategy extends Strategy {
 		}
 	}
 	
+	private void runDefender_ManicBot() throws GameActionException {
+		
+		// Now, wait for orders.
+		MapLocation myPastrTarget = intToLoc(rc.readBroadcast(BC_ORDERS_MANIC_TARGET));
+		MapLocation myPastr = intToLoc(rc.readBroadcast(BC_ORDERS_PASTR_TARGET));
+		myPathChannel = rc.readBroadcast(BC_ORDERS_PATH_CHAN);
+		int myPastrID = rc.readBroadcast(BC_PASTR_ID);
+		if ( debugLevel >= 1 ) {
+			System.out.println("[+] My Orders: "+myOrders+"\tMyPastrID: "+myPastrID+"\tMyPastr: "+myPastrTarget.toString());
+			rc.setIndicatorString(1, "My Orders: "+myOrders+"     MyPastrID: "+myPastrID+"     MyPastr: "+myPastrTarget.toString());
+		}
+
+		boolean inPosition = false;
+		boolean pastrIsDead = false;
+		Robot myPastrRobot = null;
+		RobotInfo rif;
+		
+		while ( true ) {
+
+			// Update my variables
+			myLoc = rc.getLocation();
+			pathStatus = rc.readBroadcast(myPathChannel);
+			rc.broadcast(BC_PASTR_LIST+myPastrID, 5);
+			rc.broadcast(BC_PASTR_LIST+myPastrID-1, 5);
+			
+			
+			
+			// Check for Distress Signal
+			Robot target = getClosestEnemyTarget();
+			if ( target != null ) {
+				// Send out a distress call
+				sendDistressCall(25,rc.senseRobotInfo(target).location.distanceSquaredTo(myLoc),myLoc);
+			}
+
+
+			
+			// Check for Enemies
+			RobotInfo tInf = null;
+			if ( target != null ) tInf = rc.senseRobotInfo(target);
+
+			
+			
+			if ( pastrIsDead && rc.isActive() ) {
+				// If enemy is detected and pastr is dead, flee towards the swarm for protection
+				if ( target != null ) followPath(intToLoc(rc.readBroadcast(BC_SWARM_LEAD_LOC)),rc.senseRobotInfo(target).location);
+				else {
+					if (myLoc.equals(myPastr) ) {
+						rc.construct(RobotType.PASTR);
+					}
+					else followPath(myPastr);
+				}
+			}
+			
+			
+			// If an enemy is detected and close enough, and i am in position, finish off the Pastr
+			if ( rc.isActive() && target != null && inPosition && tInf.location.distanceSquaredTo(myLoc) <= 25.0 ) {
+				// If i dont already have the object for my Pastr robot, try to find it.
+				if ( myPastrRobot == null ) {
+					Robot[] r = rc.senseNearbyGameObjects(Robot.class);
+					for ( Robot n : r ) {
+						rif = rc.senseRobotInfo(n);
+						//System.out.println()
+						if ( rif.type.equals(RobotType.PASTR) && rif.location.isAdjacentTo(myLoc) ) myPastrRobot = n;
+					}
+				}
+
+				if ( myPastrRobot != null ) {
+					if ( rc.canSenseObject(myPastrRobot) ) {
+						rif = rc.senseRobotInfo(myPastrRobot);
+						rc.attackSquare(rif.location);
+						if ( !rc.canSenseObject(myPastrRobot) ) {
+							System.out.println("Pastr is DEAD!!!!");
+							pastrIsDead = true;
+						}
+					}
+				}
+			}
+
+			
+			/*
+			// If an enemy is detected, move to avoid it.
+			if ( rc.isActive() && target != null && !inPosition ) {
+				MapLocation awayTarget = myLoc.add(tInf.location.directionTo(myLoc));
+				takeStepTowards(awayTarget);				
+				System.out.println("Enemy Detected at "+tInf.location+"!  Moving away, towards "+awayTarget);
+			}
+			/* */
+
+			
+			
+			// Movement to get in position
+			if ( rc.isActive() && !inPosition ) {
+				if ( myLoc.equals(myPastrTarget) ) { inPosition = true; }
+				else followPath(myPastrTarget);
+				System.out.println("In Position:  "+inPosition+"     PT: "+myPastrTarget);
+			}
+
+			
+			
+			// Attack and KILL MY PASTR....almost.
+			System.out.println(( inPosition == true )+"  && "+( rc.isActive() )+" == "+(( inPosition == true ) && ( rc.isActive() )));
+			if ( ( inPosition == true ) && ( rc.isActive() ) ) {
+				// If i dont already have the object for my Pastr robot, try to find it.
+				if ( myPastrRobot == null ) {
+					Robot[] r = rc.senseNearbyGameObjects(Robot.class);
+					for ( Robot n : r ) {
+						rif = rc.senseRobotInfo(n);
+						//System.out.println()
+						if ( rif.type.equals(RobotType.PASTR) && rif.location.isAdjacentTo(myLoc) ) myPastrRobot = n;
+					}
+				}
+				
+				if ( myPastrRobot != null ) {
+					if ( rc.canSenseObject(myPastrRobot) ) {
+						rif = rc.senseRobotInfo(myPastrRobot);
+						if ( rif.health > 10.0 ) rc.attackSquare(rif.location);
+					}
+				}
+			}
+			
+			
+			
+			
+			
+			rc.yield();
+		}
+	}
+
 	private void runDefender_NoiseTower() throws GameActionException {
 		
 		// For now, the Noise-Tower constructor's behavior will be exactly the same as the Defender_Pastr
 		runDefender_Pastr();
 	}
 	
+	private void setUpNewPastr(MapRender mren) throws GameActionException {
+		// Time to give the squad its orders
+		if ( debugLevel >= 1 ) System.out.println("[Cow] Queue Size:  "+cowLocs.size());
+		
+		// Next, select a location that doesnt interfere with any of the current locations
+		boolean badLocation;
+		MapLocation cur;
+		do {
+			badLocation = false;
+			nextLoc = cowLocs.remove();
+			
+			// Look for a new rally point for the swarm
+			// Starting from the loc, move 10 spaces towards the EHQ
+			cur = nextLoc.loc;
+			for ( int i = 10; i > 0; i--) {
+				cur = cur.add(cur.directionTo(eHQ));
+				if ( rc.senseTerrainTile(cur).equals(TerrainTile.VOID) ) {
+					badLocation = true;
+					break;
+				}
+			}
+			
+			// Next, see if this area has at least enough room to hold the swarm.
+			Direction curD = cur.directionTo(eHQ);
+			for ( int i = 8; i > 0; i-- ) {
+				curD.rotateLeft();
+				if ( rc.senseTerrainTile(cur.add(curD)).equals(TerrainTile.VOID) ) {
+					badLocation = true;
+					break;
+				}
+			}
+			
+			if ( debugLevel >= 1 ) System.out.println("Trying "+nextLoc.loc+"...");
+		} while ( !cowLocs.isEmpty() && badLocation );
+	
+		rc.broadcast(BC_ORDERS_NOISE_TARGET, locToInt(nextLoc.loc));
+		
+		rc.broadcast(BC_ALT_RALLY, locToInt(cur));
+		rc.broadcast(BC_ALT_USE, 1);
+		
+		// Decide which location to build the Pastr in, there are 8 options.
+		MapLocation tempLoc = null;
+		MapLocation eHQ = rc.senseEnemyHQLocation();
+		double tempDist = 0;
+		// Check to see if each is on the map AND not a void
+		MapLocation m1 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y-1);	if ( !locIsOnMap(m1) ) m1 = eHQ;	if ( mren.terrainMatrix[m1.x][m1.y] == 99 ) m1 = eHQ;	
+		MapLocation m2 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y);	if ( !locIsOnMap(m2) ) m2 = eHQ;	if ( mren.terrainMatrix[m2.x][m2.y] == 99 ) m2 = eHQ;
+		MapLocation m3 = new MapLocation(nextLoc.loc.x-1,nextLoc.loc.y+1);	if ( !locIsOnMap(m3) ) m3 = eHQ;	if ( mren.terrainMatrix[m3.x][m3.y] == 99 ) m3 = eHQ;
+		MapLocation m4 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y+1);	if ( !locIsOnMap(m4) ) m4 = eHQ;	if ( mren.terrainMatrix[m4.x][m4.y] == 99 ) m4 = eHQ;
+		MapLocation m5 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y+1);	if ( !locIsOnMap(m5) ) m5 = eHQ;	if ( mren.terrainMatrix[m5.x][m5.y] == 99 ) m5 = eHQ;
+		MapLocation m6 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y);	if ( !locIsOnMap(m6) ) m6 = eHQ;	if ( mren.terrainMatrix[m6.x][m6.y] == 99 ) m6 = eHQ;
+		MapLocation m7 = new MapLocation(nextLoc.loc.x+1,nextLoc.loc.y-1);	if ( !locIsOnMap(m7) ) m7 = eHQ;	if ( mren.terrainMatrix[m7.x][m7.y] == 99 ) m7 = eHQ;
+		MapLocation m8 = new MapLocation(nextLoc.loc.x,nextLoc.loc.y-1);	if ( !locIsOnMap(m8) ) m8 = eHQ;	if ( mren.terrainMatrix[m8.x][m8.y] == 99 ) m8 = eHQ;
+		
+		// Choose the one farthest from the EHQ.
+		if ( m1.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m1; tempDist = m1.distanceSquaredTo(eHQ); }
+		if ( m2.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m2; tempDist = m2.distanceSquaredTo(eHQ); }
+		if ( m3.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m3; tempDist = m3.distanceSquaredTo(eHQ); }
+		if ( m4.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m4; tempDist = m4.distanceSquaredTo(eHQ); }
+		if ( m5.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m5; tempDist = m5.distanceSquaredTo(eHQ); }
+		if ( m6.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m6; tempDist = m6.distanceSquaredTo(eHQ); }
+		if ( m7.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m7; tempDist = m7.distanceSquaredTo(eHQ); }
+		if ( m8.distanceSquaredTo(eHQ) > tempDist ) { tempLoc = m8; tempDist = m8.distanceSquaredTo(eHQ); }
+
+		rc.broadcast(BC_ORDERS_PASTR_TARGET, locToInt(tempLoc));
+		
+		// Get the Maniac destination
+		Direction tempDir = tempLoc.directionTo(nextLoc.loc).rotateLeft();
+
+		MapLocation temp = tempLoc.add(tempDir);
+		TerrainTile t = rc.senseTerrainTile(temp);
+
+		while ( t.equals(TerrainTile.OFF_MAP) || t.equals(TerrainTile.VOID)) {
+			tempDir = tempDir.rotateLeft();
+			temp = tempLoc.add(tempDir);
+			t = rc.senseTerrainTile(temp);
+		}
+		
+		rc.broadcast(BC_ORDERS_MANIC_TARGET, locToInt(temp));
+	}
+
+	
 	private void runDefender_Pastr() throws GameActionException {
-		int targInt = rc.readBroadcast(BC_PASTR_TARGET);
+		int targInt = 0;
+		if ( myOrders == 2 ) targInt = rc.readBroadcast(BC_ORDERS_PASTR_TARGET);
+		else if ( myOrders == 3 ) targInt = rc.readBroadcast(BC_ORDERS_NOISE_TARGET);
 		MapLocation myTarget = intToLoc(targInt);
 		myPathChannel = rc.readBroadcast(BC_ORDERS_PATH_CHAN);
 		int myPastrID = rc.readBroadcast(BC_PASTR_ID);
+		rc.broadcast(targInt+4000,myPastrID);
 		if ( debugLevel >= 1 ) {
 			System.out.println("[+] My Orders: "+myOrders+"\tMyPastrID: "+myPastrID+"\tMyPastr: "+myTarget.toString());
 			rc.setIndicatorString(1, "My Orders: "+myOrders+"     MyPastrID: "+myPastrID+"     MyPastr: "+myTarget.toString());
@@ -498,22 +630,27 @@ public class HardFormationSwarmStrategy extends Strategy {
 			pathStatus = rc.readBroadcast(myPathChannel);
 			myLoc = rc.getLocation();
 			rc.broadcast(BC_PASTR_LIST+myPastrID, 3);
+			if ( debugLevel >= 3 ) System.out.println("Broadcasting:: "+myPastrID);
+			
+			
+			// Check for Distress Signal
+			Robot closestTarget = getClosestEnemyTarget();
+			if ( closestTarget != null ) {
+				// Send out a distress call
+				sendDistressCall(20,rc.senseRobotInfo(closestTarget).location.distanceSquaredTo(myLoc),myLoc);
+			}
+
 		
 			// Movement
 			if ( rc.isActive() ) {
 				if ( myLoc.equals(myTarget) ) {
 					// TODO This section isnt strictly compliant with the method, but instead is adapted to fill the NT role as well.
 					if ( myOrders == 2 ) {
-						for ( int wait = 250; wait > 0; wait--) {
-							rc.broadcast(BC_PASTR_LIST+myPastrID, 3);
-							rc.yield();
-						}
-						//rc.selfDestruct();
-						rc.construct(RobotType.PASTR);
+						if ( rc.readBroadcast(BC_PASTR_SPAWN) <= 50 ) rc.construct(RobotType.PASTR);
 					}
 					if ( myOrders == 3 ) rc.construct(RobotType.NOISETOWER);
 				}
-				else followDefenderPathToLeader();
+				else followPath(formLoc);
 			}
 			
 			
@@ -526,8 +663,11 @@ public class HardFormationSwarmStrategy extends Strategy {
 		myPathChannel = rc.readBroadcast(BC_ORDERS_PATH_CHAN);
 		MapLocation pastrTarget = null, rallyPoint = null;
 		MapLocation center = new MapLocation(width/2,height/2);
+		boolean flee;
+		DistressSignal currentDistressCall = new DistressSignal(0);
 		int tsi;
 		rc.broadcast(BC_SWARM_ID, mySwarmID+1);
+		int timeSinceFormLoc = 0;
 		if ( debugLevel >= 1 ) System.out.println("[+] My Orders: "+myOrders+"\tMyPathChan: "+myPathChannel+"\t");
 		while ( true ) {
 			// Get Swarm ID
@@ -541,9 +681,21 @@ public class HardFormationSwarmStrategy extends Strategy {
 			
 			// Update my variables
 			myLoc = rc.getLocation();
-			formLoc = getFormationLocation();
+			flee = false;
+			if ( mySwarmID == 1 ) {
+				rc.broadcast(BC_SWARM_FORM_COUNT, rc.readBroadcast(BC_SWARM_FORM_COUNTER));
+				rc.broadcast(BC_SWARM_FORM_COUNTER,0);
+			}
+			else {
+				formLoc = getFormationLocation();
+				timeSinceFormLoc--;
+				if ( myLoc.equals(formLoc) ) {
+					timeSinceFormLoc = 15;
+				}
+				if ( timeSinceFormLoc > 0) rc.broadcast(BC_SWARM_FORM_COUNTER, rc.readBroadcast(BC_SWARM_FORM_COUNTER)+1);
+				if ( formLoc != null && !locIsOnMap(formLoc) ) formLoc = intToLoc(rc.readBroadcast(BC_SWARM_LEAD_LOC));
+			}
 			dir = null;
-			if ( formLoc != null && !locIsOnMap(formLoc) ) formLoc = intToLoc(rc.readBroadcast(BC_SWARM_LEAD_LOC));
 			if ( mySwarmID == 1 ) pathStatus = rc.readBroadcast(200);
 			else pathStatus = rc.readBroadcast(myPathChannel);
 			moveStatus = rc.isActive();
@@ -553,12 +705,18 @@ public class HardFormationSwarmStrategy extends Strategy {
 			if ( isAdjacentToEnemy() ) rc.broadcast(BC_ATTACK_ADJ, 1);
 			if ( rc.isActive() ) {
 				if ( mySwarmID == 1 ) {
-					if ( rc.readBroadcast(BC_ATTACK_ADJ) == 1 || isAdjacentToEnemy() ) {
+					Robot target = getBestEnemyTarget();
+
+					if ( target != null && rc.senseRobotInfo(target).location.distanceSquaredTo(eHQ) < 25.0 && isInShootingRange(target) ) {
+						rc.broadcast(BC_ATTACK_FLAG, 1);
+						rc.attackSquare( rc.senseRobotInfo(target).location );
+						moveStatus = false;
+					}
+					else if ( rc.readBroadcast(BC_ATTACK_ADJ) == 1 || isAdjacentToEnemy() ) {
 						// Flag the attack
 						rc.broadcast(BC_ATTACK_FLAG, 1);
 						
 						// Get the attack target
-						Robot target = getBestEnemyTarget();
 						if ( target != null && isInShootingRange(target) ) {
 							// Shoot it
 							rc.attackSquare( rc.senseRobotInfo(target).location );
@@ -569,13 +727,17 @@ public class HardFormationSwarmStrategy extends Strategy {
 					rc.broadcast(BC_ATTACK_ADJ,0);
 				}
 				else {
-					if ( myLoc.equals(formLoc) ) {
+					if ( timeSinceFormLoc > 0 ) {
 						if ( rc.readBroadcast(BC_ATTACK_FLAG) == 1) {
 							// Get the attack target
 							Robot target = getBestEnemyTarget();
-							if ( target != null && isInShootingRange(target) ) {
-								// Shoot it
-								rc.attackSquare( rc.senseRobotInfo(target).location );
+							if ( target != null ) {
+								if ( isInShootingRange(target) ) {
+									// Shoot it
+									rc.attackSquare( rc.senseRobotInfo(target).location );
+								}
+								else takeStepTowards(rc.senseRobotInfo(target).location);
+								moveStatus = false;
 							}
 						}
 					}
@@ -585,6 +747,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 						if ( target != null && isInShootingRange(target) ) {
 							// Shoot it
 							rc.attackSquare( rc.senseRobotInfo(target).location );
+							moveStatus = false;
 						}
 					}
 				}
@@ -595,27 +758,49 @@ public class HardFormationSwarmStrategy extends Strategy {
 			// Movement
 			if ( mySwarmID == 1) {
 				// If there is a distress call, prioritize that.
+				DistressSignal tempDistressCall = new DistressSignal(rc.readBroadcast(BC_DISTRESS_PENDING));
+				rc.broadcast(BC_DISTRESS_PENDING, 0);
+				// If it's null, accept it as the current;
+				if ( currentDistressCall.age+distressTurnLife < Clock.getRoundNum() ) currentDistressCall = new DistressSignal(0);
+				if ( tempDistressCall.priority >= currentDistressCall.priority ) { currentDistressCall = tempDistressCall; }				
+				if ( moveStatus && currentDistressCall.priority > 0 ) {
+					if ( debugLevel >= 1 ) {
+						rc.setIndicatorString(2, "Responding to Distress Call near"+intToLoc(currentDistressCall.loc)+", Priority "+currentDistressCall.priority);
+						System.out.println("Responding to Distress Call near "+intToLoc(currentDistressCall.loc)+", Priority "+currentDistressCall.priority);
+					}
+					Robot target = getClosestEnemyTarget();
+					if ( target != null && rc.readBroadcast(BC_SWARM_FORM_COUNT) < EnemyRobots.length+2 ) {
+						followPath(intToLoc(currentDistressCall.loc),rc.senseRobotInfo(target).location);						
+					}
+					else followPath(intToLoc(currentDistressCall.loc));
+					
+					moveStatus = false;
+				}
+				
 
 				// If there is an enemy nearby, prioritize that next.
 				if ( moveStatus ) {
 					Robot target = getBestEnemyTarget();
 					if ( target != null ) {
-						if ( rc.readBroadcast(BC_SWARM_COUNT) < 6 ) {
+						if ( rc.readBroadcast(BC_SWARM_FORM_COUNT) < EnemyRobots.length+2 ) {
 							if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Avoiding nearby Enemy");
-							dir = followLeaderPathTo(myLoc.add(myLoc.directionTo(rc.senseRobotInfo(target).location).opposite()));
+							flee = true;
+							//dir = followPath(myLoc.add(myLoc.directionTo(rc.senseRobotInfo(target).location).opposite()));
+							dir = followPath(rc.senseRobotInfo(target).location,rc.senseRobotInfo(target).location);
 							moveStatus = false;
 						}
 						else {
-							if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Moving to nearby Enemy");
-							dir = followLeaderPathTo(rc.senseRobotInfo(target).location);
+							if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Moving to nearby Enemy at "+rc.senseRobotInfo(target).location);
+							dir = followPath(rc.senseRobotInfo(target).location);
 							moveStatus = false;
+							rc.broadcast(BC_ATTACK_FLAG, 1);
 						}
 					}
 				}
 
 
 				// If there is an enemy Pastr, prioritize that next.
-				if ( moveStatus && rc.readBroadcast(BC_SWARM_COUNT) >= 7) {
+				if ( moveStatus && rc.readBroadcast(BC_SWARM_FORM_COUNT) >= EnemyRobots.length+2) {
 					if ( turnLastScannedPastrs+10 < Clock.getRoundNum() ) {
 						turnLastScannedPastrs = Clock.getRoundNum();
 						EnemyPastrs = rc.sensePastrLocations(rc.getTeam().opponent());
@@ -624,15 +809,15 @@ public class HardFormationSwarmStrategy extends Strategy {
 					if ( pastrTarget == null ) {
 						double pastrDist = 99999.9;
 						for ( MapLocation n : EnemyPastrs ) {
-							if ( n.distanceSquaredTo(myLoc) < pastrDist && n.distanceSquaredTo(rc.senseEnemyHQLocation()) > 25.0 ) {
+							if ( n.distanceSquaredTo(myLoc) < pastrDist && n.distanceSquaredTo(rc.senseEnemyHQLocation()) > 9 ) {
 								pastrTarget = n;
 								pastrDist = n.distanceSquaredTo(myLoc);
 							}
 						}
 					}
 					if ( pastrTarget != null ) {
-						if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Moving towards a Pastr");
-						dir = followLeaderPathTo(pastrTarget);
+						if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Moving towards a Pastr ");
+						dir = followPath(pastrTarget);
 						moveStatus = false;
 					}
 				}
@@ -651,12 +836,16 @@ public class HardFormationSwarmStrategy extends Strategy {
 						}
 					}
 					if ( rallyPoint != null ) {
+						if ( rc.readBroadcast(BC_ALT_USE) == 1 ) {
+							if ( debugLevel >= 1 ) System.out.println("USING ALT RALLY");
+							rallyPoint = intToLoc(rc.readBroadcast(BC_ALT_RALLY));
+						}
 						if ( myLoc.equals(rallyPoint) ) {
 							if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Waiting at Rally Point");									
 						}
 						else {
 							if ( debugLevel >= 1 ) rc.setIndicatorString(2, "Heading to Rally Point");									
-							dir = followLeaderPathTo(rallyPoint);
+							dir = followPath(rallyPoint);
 							moveStatus = false;									
 						}
 					}							
@@ -675,19 +864,47 @@ public class HardFormationSwarmStrategy extends Strategy {
 						rc.setIndicatorString(0, "Scattering!!!");
 					}
 					formLoc = intToLoc(rc.readBroadcast(BC_SPAWN_LOCATION));
-					followDefenderPathToLeader();
+					followPath(formLoc);
 				}
 				else {
-					if ( !myLoc.equals(formLoc) ) followDefenderPathToLeader();
+					// Avoid the enemy, not ready to attack.
+					
+					Robot target = getClosestEnemyTarget();
+					
+					if ( target != null && rc.readBroadcast(BC_ATTACK_FLAG) == 0 ) {
+						if ( debugLevel >= 1 ) {
+							System.out.println("Flee!!");
+							rc.setIndicatorString(0, "Flee!!!");
+						}
+						if ( !myLoc.equals(formLoc) ) {
+							followPath(formLoc,rc.senseRobotInfo(target).location);
+						}
+					}
+					else {
+						if ( !myLoc.equals(formLoc) ) {
+							followPath(formLoc);
+						}
+					}
 				}
 				myLoc = rc.getLocation();
 			}
 
 			
 			// Update my status indicators
-			if ( debugLevel >= 1 ) rc.setIndicatorString(1, "MyOrders: "+myOrders+"     Formation ID: "+mySwarmID+"     "+"PathChannel: "+myPathChannel+"     Attack Status: "+rc.readBroadcast(BC_ATTACK_FLAG));
+			if ( debugLevel >= 1 ) rc.setIndicatorString(1, 
+					"MyOrders: "+myOrders
+					+"     Formation ID: "+mySwarmID
+					+"     PathChannel: "+myPathChannel
+					+"     Path Status: "+pathStatus
+					+"     Attack Status: "+rc.readBroadcast(BC_ATTACK_FLAG)
+					+"     SwarmSize: "+rc.readBroadcast(BC_SWARM_FORM_COUNT));
 			if ( mySwarmID == 1 ) {
 				if ( dir != null ) rc.broadcast(BC_SWARM_LEAD_LOC, locToInt(myLoc.add(dir)));
+				
+				if ( flee ) {
+					if ( rc.readBroadcast(BC_ORDERS_FLEE) == 0 ) rc.broadcast(BC_ORDERS_FLEE, 1);
+				}
+				else if ( rc.readBroadcast(BC_ORDERS_FLEE) == 1 ) rc.broadcast(BC_ORDERS_FLEE, 0);
 			}
 			
 			
@@ -702,9 +919,10 @@ public class HardFormationSwarmStrategy extends Strategy {
 		}
 	}
 
+	int lastTurnRequested = -999;
 	private boolean requestNewPath(int pathChan, int target) throws GameActionException {
 		// Check to see if the points are valid 
-		if ( myLoc.equals(intToLoc(rc.readBroadcast(200+1))) && intToLoc(target).equals(intToLoc(rc.readBroadcast(200+2))) ) {
+		if ( myLoc.equals(intToLoc(rc.readBroadcast(pathChan+1))) && intToLoc(target).equals(intToLoc(rc.readBroadcast(pathChan+2))) ) {
 			return false;
 		}
 
@@ -712,6 +930,9 @@ public class HardFormationSwarmStrategy extends Strategy {
 		if ( pathStatus == 2 || pathStatus == 3 ) {
 			return true;
 		}
+		
+		//if ( Clock.getRoundNum() < lastTurnRequested+25 ) return false;
+		//lastTurnRequested = Clock.getRoundNum();
 		
 		if ( debugLevel >= 1 ) System.out.println(">>> Requesting New Path for channel "+pathChan);
 		rc.broadcast(pathChan+1, locToInt(myLoc));
@@ -721,99 +942,39 @@ public class HardFormationSwarmStrategy extends Strategy {
 		myPathPosition = 3;			
 		return true;				
 	}
-	
-	private Direction followLeaderPathTo(MapLocation target) throws GameActionException {
-		Direction dir = null;
-		if ( debugLevel >= 2 ) System.out.println("[FLPT] START");
-		
-		if ( !target.equals(intToLoc(rc.readBroadcast(200+2))) ) {
-			if ( debugLevel >= 2 ) System.out.println("[FLPT] > CHANGE TARGET");
-			// My target has changed.
-			requestNewPath(200,locToInt(target));
-		}
 
-		
-		switch (pathStatus) {
-		case 0: // I have no path
-			if ( debugLevel >= 2 ) System.out.println("[FLPT] > CASE 0");
-			// If i have no path, request one.
-			requestNewPath(200,locToInt(target));
-			return followLeaderPathTo(target);
-			
-		case 1: // I have a path			
-			if ( debugLevel >= 2 ) System.out.println("[FLPT] > CASE 1");
-			MapLocation myTarget = intToLoc(rc.readBroadcast(200+myPathPosition)); 
-			if ( myLoc.equals(myTarget) ) {
-				myPathPosition++;
-				myTarget = intToLoc(rc.readBroadcast(200+myPathPosition));		
-			}
-			if ( rc.readBroadcast(200+myPathPosition) == -1 ) { myTarget = target; }
-			if ( debugLevel >= 1 ) rc.setIndicatorString(0, "Moving towards -> "+myTarget.toString());
-			dir = takeStepTowards(myTarget);
-			
-			if ( progressTarget != null && progressTarget.equals(myTarget) ) {
-				if ( nonProgressTurnCount == 0 ) {
-					if ( debugLevel >= 1 ) System.out.println("[FLPT]  NON-PROGRESS, REQUESTING NEW PATH");
-					requestNewPath(200,locToInt(target));
-				}
-				else if ( myLoc.distanceSquaredTo(progressTarget) < progressDistance ) {
-					progressDistance = myLoc.distanceSquaredTo(progressTarget);
-				}
-				else {
-					nonProgressTurnCount--;
-				}
-			}
-			else {
-				progressTarget = myTarget;
-				nonProgressTurnCount = 10;
-				progressDistance = 99999.9;
-			}
-
-			if ( dir == null ) {
-				// For some reason, my path current path didnt work.  Request a new one and move manually.
-				if ( !requestNewPath(200,locToInt(target)) ) {
-					// If the path is valid, but i still cant move, i am quite possibly boxed in.  Signal the troops to scatter.
-					if ( debugLevel >= 1 ) rc.setIndicatorString(0, "Scattering the troops...");
-					rc.broadcast(BC_SCATTER_FLAG, 1);
-					return null;
-				}
-				return followLeaderPathTo(target);
-			}
-			break;
-			
-		case 2: // I have requested a new path
-			if ( debugLevel >= 2 ) System.out.println("[FLPT] > CASE 2");
-		case 3: // A new path is incoming
-			if ( debugLevel >= 2 ) if ( pathStatus == 3 ) System.out.println("[FLPT] > CASE 3");
-			// In the mean time, try and find my own way.
-			if ( debugLevel >= 1 ) rc.setIndicatorString(0, "Waiting for a new Path");
-
-			dir = takeStepTowards(target);
-			break;
-		}		
-
-		if ( debugLevel >= 2 ) System.out.println("[FLPT] > END");
-
-		myLoc = rc.getLocation();
-		return dir;
-	}
-	
 	// Pathing variables
-	int nonProgressTurnCount = 10;
+	int nonProgressTurnCount = 5;
 	double progressDistance = 99999.9;
 	MapLocation progressTarget;
-	
-	
-	private Direction followDefenderPathToLeader() throws GameActionException {
+	private Direction followPath(MapLocation in) throws GameActionException {
+		return followPath(in,null);
+	}
+	private Direction followPath(MapLocation in,MapLocation avoiding) throws GameActionException {
 		Direction dir = null;
-		MapLocation target = formLoc;
-		int targInt = locToInt(formLoc);
+		MapLocation target = in;
+		int targInt = locToInt(target);
+		int myPathChannel = this.myPathChannel;
+		if ( mySwarmID == 1 ) myPathChannel = 200;
+
+		// The leader will request a new path every time it changes.  
+		// Other bots will follow their path until the end, and then request a bot.  
+		// This is because on complex maps, the formation bots flood the HQ with requests exponentially 
+		//    faster then it can handle them, as their formation locations change each turn.
+		if ( mySwarmID == 1 ) {
+			if ( !in.equals(intToLoc(rc.readBroadcast(myPathChannel+2))) ) {
+				// My goal has changed.
+				if ( debugLevel >= 2 ) System.out.println("Requesting New Path because my Goal has changed");
+				requestNewPath(myPathChannel,targInt);			
+			}
+		}
 		
 		switch (pathStatus) {
 		case 0: // I have no path
 			// If i have no path, request one.
+			if ( debugLevel >= 2 ) System.out.println("Requesting New Path because i dont have one");
 			requestNewPath(myPathChannel,targInt);
-			return followDefenderPathToLeader();
+			break;
 			
 		case 1: // I have a path			
 			MapLocation myTarget = intToLoc(rc.readBroadcast(myPathChannel+myPathPosition)); 
@@ -821,16 +982,22 @@ public class HardFormationSwarmStrategy extends Strategy {
 				myPathPosition++;
 				myTarget = intToLoc(rc.readBroadcast(myPathChannel+myPathPosition));		
 			}
-			if ( rc.readBroadcast(myPathChannel+myPathPosition) == -1 ) { myTarget = target; }
+			if ( rc.readBroadcast(myPathChannel+myPathPosition) == -1 ) { 
+				myTarget = target;
+				if ( debugLevel >= 2 ) System.out.println("Requesting New Path because i have reached the end of my current one");
+				requestNewPath(myPathChannel,targInt);
+			}
 			if ( debugLevel >= 1 ) rc.setIndicatorString(0, "Moving towards -> "+myTarget.toString());
-			dir = takeStepTowards(myTarget);
+			if ( avoiding == null ) dir = takeStepTowards(myTarget);
+			else dir = takeStepTowardsWhileAvoiding(myTarget,avoiding);
 			if ( progressTarget != null && progressTarget.equals(myTarget) ) {
 				if ( nonProgressTurnCount == 0 ) {
-					if ( debugLevel >= 1 ) System.out.println("NON-PROGRESS, REQUESTING NEW PATH");
+					if ( debugLevel >= 2 ) System.out.println("Requesting New Path because i am stuck");
 					requestNewPath(myPathChannel,targInt);
 				}
 				else if ( myLoc.distanceSquaredTo(progressTarget) < progressDistance ) {
 					progressDistance = myLoc.distanceSquaredTo(progressTarget);
+					nonProgressTurnCount = 5;
 				}
 				else {
 					nonProgressTurnCount--;
@@ -838,7 +1005,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 			}
 			else {
 				progressTarget = myTarget;
-				nonProgressTurnCount = 10;
+				nonProgressTurnCount = 5;
 				progressDistance = 99999.9;
 			}
 			
@@ -847,122 +1014,51 @@ public class HardFormationSwarmStrategy extends Strategy {
 				// For some reason, my path current path didnt work.  
 				// Check to see if the path is valid (start and end are correct, but i still cant go)
 				// If so, there's no reason to request a new path, there's probably a bot in the way, just wait it out.
-				if ( !myLoc.equals(intToLoc(rc.readBroadcast(myPathChannel+1))) || !target.equals(intToLoc(rc.readBroadcast(myPathChannel+2))) ) {
-					// Check to see if a new path is already requested.
-					if ( pathStatus != 2 && pathStatus != 3 ) {
-						// Otherwise, request a new one and move manually.
-						requestNewPath(myPathChannel,targInt);
-					}					
-					else if ( debugLevel >= 1 ) rc.setIndicatorString(0, "I cant seem to go anywhere...");
+				
+				// Check to see if there is a bot in the way
+				GameObject gob;
+				if ( rc.canSenseSquare(myTarget) ) {
+					gob = rc.senseObjectAtLocation(myTarget);
+					if ( gob != null ) {
+						if ( mySwarmID == 200 ) {
+							if ( debugLevel >= 2 ) System.out.println("Requesting New Path because i cant move.");
+							if ( !requestNewPath(200,locToInt(target)) ) {
+								// If the path is valid, but i still cant move, i am quite possibly boxed in.  Signal the troops to scatter.
+								if ( debugLevel >= 1 ) rc.setIndicatorString(0, "Scattering the troops...");
+								rc.broadcast(BC_SCATTER_FLAG, 1);
+								return null;
+							}
+						}
+						else {
+							if ( debugLevel >= 1 ) System.out.println("[<>] Tried to move to "+myTarget+" but there was a bot in the way.  Skipping to the next point.");
+							if ( rc.readBroadcast(myPathChannel+myPathPosition) != -1) {
+								myPathPosition++;
+								return followPath(target,avoiding);
+							}
+						}
+					}
 				}
-				return followDefenderPathToLeader();
 			}
 			break;
 			
 		case 2: // I have requested a new path
-		case 3: // A new path is incoming
-			// In the mean time, try and find my own way.
-			dir = takeStepTowards(target);
+			// In the mean time, wait.
+			//if ( myLoc.distanceSquaredTo(target) < 16 ) dir = takeStepTowards(target);
+			if ( avoiding == null ) dir = takeStepTowards(target);
+			else dir = takeStepTowardsWhileAvoiding(target,avoiding);
+			if ( dir != null ) rc.broadcast(myPathChannel+1, locToInt(myLoc.add(dir)));			
 			break;
+		case 3: // A new path is incoming
+			// Do nothing, wait for the path.
 		}		
 		
 		myLoc = rc.getLocation();
 		return dir;
 	}
-		
-	/* OLD
-	private Direction followLeaderPathTo(MapLocation target) throws GameActionException {
-		// TODO Turned off all non-path movements, to try and fix some bugs at the cost of movement speed
-		Direction dir = null;
-		if ( debugLevel >= 2 ) System.out.println("LeaderPath -> "+target.toString());
-		if ( !target.equals(intToLoc(rc.readBroadcast(200+2))) ) {
-			if ( debugLevel >= 2 ) System.out.println("Leader  REQ PATH CHANGE -> "+target.toString());
-			// Request a path
-			myPathPosition = 3;
-			rc.broadcast(200, 2);
-			rc.broadcast(200+2, locToInt(target));
-		}
-		if ( rc.readBroadcast(200) != 1 ) {
-			if ( debugLevel >= 2 ) System.out.println("   LP -> BC == 1  "+target.toString());
-			dir = takeStepTowards(target);
-			myLoc = rc.getLocation();
-		}
-		else {
-			if ( debugLevel >= 2 ) System.out.println("   LP ->	 BC != 1  "+target.toString());
-			MapLocation myTarget = intToLoc(rc.readBroadcast(200+myPathPosition)); 
-			if ( myLoc.equals(myTarget) ) {
-				if ( debugLevel >= 2 ) System.out.println("   LP -> MyLoc == Targ  "+target.toString());
-				myPathPosition++;
-				if ( rc.readBroadcast(200+myPathPosition) == -1 ) myTarget = target;
-				else myTarget = intToLoc(rc.readBroadcast(200+myPathPosition));		
-			}
-			else if ( rc.readBroadcast(200+myPathPosition) == -1 ) { myTarget = target; }
-			if ( debugLevel >= 2 ) System.out.println("   LP -> Step Towards  "+myTarget.toString());
-			dir = takeStepTowards(myTarget);
-			myLoc = rc.getLocation();
-		}
-		if ( dir == null && rc.readBroadcast(200) == 1 ) {
-			System.out.println("   LP -> Unable to find my way, requesting a new path");
-			int bc = rc.readBroadcast(200);
-			if ( bc != 2 && bc != 3 ) rc.broadcast(200, 2);	
-			return null;
-			
-		}
-		return dir;
-	}
-	/* */
+
 	
 	
-	/* OLD
-	private void followDefenderPathToLeader() throws GameActionException {
-		MapLocation myTarget;
-		Direction sucess = null;
-		if ( debugLevel >= 3 ) System.out.println("DefenderPath -> ");
-		//System.out.println(rc.readBroadcast(myPathChannel));
-		if ( rc.readBroadcast(myPathChannel) != 1 && rc.readBroadcast(myPathChannel) != 3 ) {
-			// I am working on my own, with no path to follow, if i am too far away i should request a path.
-			if ( rc.getLocation().distanceSquaredTo(formLoc) >= 20.0 ) {
-				if ( debugLevel >= 1 ) rc.setIndicatorString(0,"Requested Path to leader.");
-				rc.broadcast(myPathChannel, 2);
-				myPathPosition = 3;
-				rc.broadcast(myPathChannel+1, locToInt(rc.getLocation()));
-				rc.broadcast(myPathChannel+2, locToInt(formLoc));
-			}
-			else { 
-				if ( debugLevel >= 1 ) rc.setIndicatorString(0,"MyDistanceFromLeader: "+rc.getLocation().distanceSquaredTo(formLoc)); 
-			}
-			myTarget = formLoc;
-			if ( !rc.getLocation().equals(myTarget) ) sucess = takeStepTowards(myTarget);
-		}
-		else {
-			if ( debugLevel >= 1 ) rc.setIndicatorString(0,"Following the Path.");
-			myTarget = intToLoc(rc.readBroadcast(myPathChannel+myPathPosition));
-			if ( rc.readBroadcast(myPathChannel) == 3 ) {
-				if ( debugLevel >= 1 ) rc.setIndicatorString(0,"Waiting for my Path.");
-				myTarget = formLoc;
-			}
-			else if ( rc.readBroadcast(myPathChannel+myPathPosition) == -1 ) { 
-				if ( debugLevel >= 1 ) rc.setIndicatorString(0,"Exiting the path now.");
-				myTarget = formLoc;
-				rc.broadcast(myPathChannel, 0);
-			}
-			else if ( myLoc.equals(myTarget) ) {
-				if ( debugLevel >= 1 ) rc.setIndicatorString(0,"Going to the next node in the path.");
-				myPathPosition++;
-				if ( rc.readBroadcast(myPathChannel+myPathPosition) == -1 ) myTarget = formLoc;
-				else myTarget = intToLoc(rc.readBroadcast(myPathChannel+myPathPosition));				
-			}
-			if ( !rc.getLocation().equals(myTarget) ) sucess = takeStepTowards(myTarget);
-		}
-		if ( sucess == null && rc.readBroadcast(myPathChannel) == 1 ) {
-			if ( debugLevel >= 1 ) rc.setIndicatorString(0,"Unable to find my way, requesting a new path");
-			int bc = rc.readBroadcast(myPathChannel);
-			if ( bc != 2 && bc != 3 ) rc.broadcast(myPathChannel, 2);	
-		}
-
-	}
-	/* */
-
+	
 
 
 	
@@ -1102,6 +1198,38 @@ public class HardFormationSwarmStrategy extends Strategy {
 		return false;
 	}
 	
+	private Robot getClosestEnemyTarget() throws GameActionException {
+		if ( turnLastScannedEnemys < (turnLastScannedEnemys = Clock.getRoundNum()) ) {
+			EnemyRobots = rc.senseNearbyGameObjects(Robot.class,10000,rc.getTeam().opponent());
+		}
+		if ( EnemyRobots.length == 0 ) return null;
+		Robot bestTarget = null;
+		RobotInfo btInf;
+		double range = 999.0;
+		// Process the enemies
+		for ( Robot n : EnemyRobots ) {
+			btInf = rc.senseRobotInfo(n);
+			switch (btInf.type) {
+			case HQ:
+			case NOISETOWER:
+			case PASTR:
+				break;
+				
+			case SOLDIER:
+				if ( btInf.location.distanceSquaredTo(myLoc) < range ) {
+					range = btInf.location.distanceSquaredTo(myLoc);
+					bestTarget = n;
+				}
+				break;
+				
+			default:
+				break;
+			}
+		}
+		
+		return bestTarget;
+	}
+	
 	private Robot getBestEnemyTarget() throws GameActionException {
 		if ( turnLastScannedEnemys < (turnLastScannedEnemys = Clock.getRoundNum()) ) {
 			EnemyRobots = rc.senseNearbyGameObjects(Robot.class,10000,rc.getTeam().opponent());
@@ -1117,10 +1245,10 @@ public class HardFormationSwarmStrategy extends Strategy {
 				if ( debugLevel >= 2 ) System.out.println("    Ignoring it, because it is an HQ.");
 				continue; 
 			} // Ignore HQ's
-			if ( rc.senseRobotInfo(n).location.distanceSquaredTo(eHQ) < 25.0 ) { 
-				if ( debugLevel >= 2 ) System.out.println("    Ignoring it, because it is too close to the HQ.");
-				continue; 
-			} // Ignore HQ's
+			//if ( rc.senseRobotInfo(n).location.distanceSquaredTo(eHQ) < 25.0 ) { 
+			//	if ( debugLevel >= 2 ) System.out.println("    Ignoring it, because it is too close to the HQ.");
+			//	continue; 
+			//} // Ignore HQ's
 			if ( bestTarget == null ) {
 				bestTarget = n;
 				if ( isInShootingRange(n) ) inRange = true;
@@ -1168,7 +1296,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 			return false;
 		}
 		
-		if ( debugLevel >= 2 ) p.printPath();
+		if ( debugLevel >= 1 ) p.printPath();
 		
 		do {
 			rc.broadcast(chan++, locToInt(next));
@@ -1279,7 +1407,7 @@ public class HardFormationSwarmStrategy extends Strategy {
 			}
 		}
 		
-		if ( debugLevel >= 1 ) System.out.println("Calculated Rally Point:  "+closestPoint.toString());
+		if ( debugLevel >= 1 ) if ( closestPoint != null ) System.out.println("Calculated Rally Point:  "+closestPoint.toString());
 		
 		return closestPoint;
 	}
@@ -1367,6 +1495,42 @@ public class HardFormationSwarmStrategy extends Strategy {
 		if ( debugLevel >= 1 ) System.out.println("Completed Cow Growth Processing");
 		processingCowLocations = false;
 	}
+	// Priorities:
+	//   Swarm Bot:		10 // Maybe
+	//   Pastr Bot:		20
+	//   Manic Bot:		20
+	//   Tower Bot:		20
+	//   Noise Tower:	50
+	//   Pastr:			80
+	public void sendDistressCall(int basePriority, double distanceFromEnemy, MapLocation distressLoc) throws GameActionException {
+		
+		// Start with the base priority based on the incoming distress type (Pastrs are worth more than bots, etc.)
+		double calcPriority = basePriority;
+		
+		// Next, factor in the distance to the enemy
+		if ( distanceFromEnemy < 24.0 ) calcPriority *= 1.5;
+		
+		
+		// Next, factor in the distance from the swarm.  If they're close, this distress call can be handled quickly, so divert to handle it.
+		if ( distressLoc.distanceSquaredTo(intToLoc(rc.readBroadcast(BC_SWARM_LEAD_LOC))) < (distressTurnLife*distressTurnLife/4) ) {
+			calcPriority *= 1.2;
+		}
+		
+		// Now, get the current Distress signal
+		DistressSignal current = new DistressSignal(rc.readBroadcast(BC_DISTRESS_PENDING));
+		
+		// If the current Distress signal is lower priority than this one, override the current signal.
+		if ( current.priority < calcPriority ) {
+			//DistressSignal n = new DistressSignal((int)calcPriority, (int)distanceFromEnemy, locToInt(distressLoc));
+			DistressSignal n = new DistressSignal(
+					locToInt(distressLoc),
+					(int)calcPriority, 
+					(int)distanceFromEnemy 
+					);
+			if ( debugLevel >= 1 ) System.out.println("Updating Distress Signal at "+distressLoc+" with DFE"+distanceFromEnemy+" :  "+n.priority+"\t"+n.dfe+'\t'+n.loc);
+			rc.broadcast(BC_DISTRESS_PENDING, n.toInt());
+		}
+	}
 	
 	public class CowLocation implements Comparable<CowLocation> {
 		
@@ -1385,6 +1549,32 @@ public class HardFormationSwarmStrategy extends Strategy {
 			return 0;
 		}
 		
+	}
+	
+	public class DistressSignal {
+		
+		int loc;
+		int priority;
+		int dfe;
+		int age;
+		
+		public DistressSignal(int in) {
+			loc = (int)(in/(100*200));
+			priority = (int)((in-(100*200*loc))/100);
+			dfe = (in-(100*priority)-(loc*200*100));
+			age = Clock.getRoundNum();
+		}
+		
+		public DistressSignal(int l, int p, int d) {
+			loc = l;
+			priority = p;
+			dfe = d;
+			age = Clock.getRoundNum();
+		}
+		
+		public int toInt() {
+			return (dfe+(priority*100)+(200*100*loc));
+		}
 	}
 
 }

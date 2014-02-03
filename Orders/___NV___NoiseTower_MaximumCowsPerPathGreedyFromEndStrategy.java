@@ -9,11 +9,11 @@ import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
 
-public class NoiseTower_MaximumCowsPerPathGreedyFromEndStrategy extends NoiseTower {
+public class ___NV___NoiseTower_MaximumCowsPerPathGreedyFromEndStrategy extends NoiseTower {
 
 	MapLocation[] Perimeter;
 	
-	public NoiseTower_MaximumCowsPerPathGreedyFromEndStrategy(RobotController in) { 
+	public ___NV___NoiseTower_MaximumCowsPerPathGreedyFromEndStrategy(RobotController in) { 
 		super(in);
 
 		System.out.println("Calculating Perimeter...");
@@ -33,7 +33,7 @@ public class NoiseTower_MaximumCowsPerPathGreedyFromEndStrategy extends NoiseTow
 		
 		targetLoc = myLoc;
 		if ( debugLevel >= 2 ) System.out.println("[OO]  M: "+myLoc.toString()+"\tT: "+targetLoc.toString()+"\tD: "+myLoc.distanceSquaredTo(targetLoc));
-		rc.attackSquareLight(targetLoc);		
+		rc.attackSquare(targetLoc);		
 	}
 	
 

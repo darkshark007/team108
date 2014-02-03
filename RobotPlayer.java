@@ -3,6 +3,7 @@ package team108;
 import java.util.Random;
 
 import team108.Graph.MapRender;
+import team108.Orders.*;
 import team108.Path.BreadthFirstPathing;
 import team108.Path.DepthFirstPathing;
 import team108.Path.____DirectWithOptimizedBuggingPathGenerator____OLD;
@@ -26,9 +27,20 @@ public class RobotPlayer {
 	static I_RobotStrategy strategy;
 	
 	public static void run(RobotController rc) throws GameActionException {
+
+
 		
+			
+			
+			
+		
+		
+		
+		//strategy = new HardFormationSwarmStrategy(rc);
 		//strategy = new SwarmAndScoopStrategy(rc);
-		strategy = new HardFormationSwarmStrategy(rc);
+		//strategy = new ___NewNoiseTowerTester(rc);
+		//strategy = new PassiveHerdingStrategy(rc);
+		strategy = new HardFormationSwarmStrategyV2(rc);
 		
 		
 	

@@ -75,7 +75,7 @@ public class NoiseTower_CircularSweepUsingFarthestPointPrediction extends NoiseT
 		//targetLoc = new MapLocation(dX,dY);
 		//targetLoc = myLoc;
 		if ( debugLevel >= 2 ) System.out.println("[OO]  M: "+myLoc.toString()+"\tT: "+targetLoc.toString()+"\tD: "+myLoc.distanceSquaredTo(targetLoc));
-		rc.attackSquareLight(targetLoc);		
+		rc.attackSquare(targetLoc);		
 	}
 	
 	private class ValidCowTarget implements Comparable<ValidCowTarget> {

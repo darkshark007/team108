@@ -61,7 +61,7 @@ public class NoiseTower_DiagonalCrossSweepUsingRadiusAndAngle extends Orders {
 		
 		targetLoc = new MapLocation(dX,dY);
 		System.out.println("M: "+myLoc.toString()+"\tT: "+targetLoc.toString()+"\tD: "+myLoc.distanceSquaredTo(targetLoc));
-		rc.attackSquareLight(targetLoc);
+		rc.attackSquare(targetLoc);
 		
 		radius = (radius+(MAX_RADIUS/TURNS_TO_PULL)) % MAX_RADIUS;
 		

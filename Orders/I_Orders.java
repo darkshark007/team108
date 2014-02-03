@@ -13,6 +13,8 @@ import battlecode.common.RobotController;
 public interface I_Orders extends I_Debugger {
 	
 	public void executeOrders() throws GameActionException;
+	
+	public void processData() throws GameActionException;
 
 	
 	

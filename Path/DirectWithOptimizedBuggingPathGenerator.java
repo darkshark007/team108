@@ -14,6 +14,9 @@ public class DirectWithOptimizedBuggingPathGenerator extends PathGenerator {
 	public DirectWithOptimizedBuggingPathGenerator(RobotController in) {
 		super(in);
 	}
+	public DirectWithOptimizedBuggingPathGenerator(RobotController in, MapRender mren) {
+		super(in,mren);
+	}
 	
 	public void init() {
 		if ( mren == null ) { 
@@ -59,7 +62,7 @@ public class DirectWithOptimizedBuggingPathGenerator extends PathGenerator {
 		current = from;
 		
 		// Now, go through the path and make sure it does not contain any Voids.  If it does, they will be resolved with bugging.
-		int i = 0,optFrom = 0;
+		int i = 1,optFrom = 0;
 		MapLocation buggingTarget;
 		while (!current.equals(to)) {
 			current = workingPath.get(i);
@@ -83,7 +86,7 @@ public class DirectWithOptimizedBuggingPathGenerator extends PathGenerator {
 				do {
 					j++;					
 					buggingTarget = workingPath.get(j);
-				} while ( mren.terrainMatrix[buggingTarget.x][buggingTarget.y] == 99 );
+				} while ( mren.terrainMatrix[buggingTarget.x][buggingTarget.y] == 99 && j < workingPath.size()-1);
 				
 				if ( debugLevel >= 3 ) System.out.println("Marker #1  "+current.toString());
 				MapLocation cBugLeft = current;

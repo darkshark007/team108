@@ -20,9 +20,9 @@ public class MapRender implements I_Debugger {
 	public double[][] cowSpawnRate;
 	short[][] directAdjMatrix;
 	
-	int totalCount = 0;
-	int reuseCount = 0;
 	boolean FLAG_CollectVoids = false;
+	boolean FLAG_Init = false;
+	boolean FLAG_EnemyBaseBlackList = false;
 
 	public MapRender(RobotController in) {
 		rc = in;
@@ -35,6 +35,9 @@ public class MapRender implements I_Debugger {
 	}
 	
 	public void init() {
+
+		if ( FLAG_Init ) System.out.println("[!!] WARNING:  MapRender has already been Initialized");
+		FLAG_Init = true;
 
 		// 1.  Compile the terrainMatrix
 		/* V1
@@ -118,9 +121,12 @@ public class MapRender implements I_Debugger {
 		m = rc.senseEnemyHQLocation();
 		terrainMatrix[m.x][m.y] = 99;
 
+		if ( FLAG_EnemyBaseBlackList ) blacklistEnemyBasePerimeter();
+		
 		if ( debugLevel >= 1 ) System.out.println("[>] Map Render Complete");
 	}
-	
+
+	/* OLD
 	public void blacklistEnemyBasePerimeter() {
 		MapLocation eHQ = rc.senseEnemyHQLocation();
 		MapLocation temp;
@@ -230,8 +236,27 @@ public class MapRender implements I_Debugger {
 		// Row 11
 		temp = new MapLocation(x,y+5); if ( locIsOnMap(temp) ) terrainMatrix[temp.x][temp.y] = 99;
 	}
+	/* */
+	
+	public void blacklistEnemyBasePerimeter() {
+		if ( !FLAG_Init ) init();
+		FLAG_EnemyBaseBlackList = true;
+		
+		MapLocation[] List = MapLocation.getAllMapLocationsWithinRadiusSq(rc.senseEnemyHQLocation(), 25);
+		
+		for ( MapLocation n : List ) {
+			if ( locIsOnMap(n) ) {
+				terrainMatrix[n.x][n.y] = 99;
+			}
+		}
+	}
+
 	
 	public void voidPad(int padAmt) {
+		
+		if ( !FLAG_Init ) init();
+		
+		
 		int ulX,ulY,brX,brY;
 		if ( voids == null ) {
 			if ( debugLevel >= 1 ) System.out.println("Padding the MapRender by {"+padAmt+"} using Matrix Search");
@@ -281,6 +306,7 @@ public class MapRender implements I_Debugger {
 	}
 	
 	public void setFlag_CollectVoids(boolean in) {
+		if ( FLAG_Init ) System.out.println("[!!] WARNING: Collect Voids flag has been set, but MapRender has already been initialized.  Voids will not be collected until re-initialization.");
 		FLAG_CollectVoids = in;
 	}
 	
@@ -355,7 +381,12 @@ public class MapRender implements I_Debugger {
 		newRend.height = height;
 		
 		newRend.terrainMatrix = deepCopyShortMatrix(terrainMatrix);
-		newRend.directAdjMatrix = deepCopyShortMatrix(directAdjMatrix);		
+		newRend.directAdjMatrix = deepCopyShortMatrix(directAdjMatrix);
+		newRend.cowSpawnRate = rc.senseCowGrowth();
+		newRend.FLAG_CollectVoids = FLAG_CollectVoids;
+		newRend.FLAG_Init = FLAG_Init;
+		newRend.FLAG_EnemyBaseBlackList = FLAG_EnemyBaseBlackList;
+		
 		if ( voids != null ) newRend.voids = (LinkedList<MapLocation>)voids.clone();
 		
 		return newRend;
@@ -372,6 +403,30 @@ public class MapRender implements I_Debugger {
 		if ( in.x >= rc.getMapWidth() ) return false;
 		if ( in.y >= rc.getMapHeight() ) return false;
 		return true;
+	}
+	
+	
+	public void printMap() {
+		System.out.println("Map Print:");
+		for ( int i = 0; i < width; i++) {
+			System.out.print("   ");
+			for ( int j = 0; j < height; j++) {
+				switch (terrainMatrix[j][i]) {
+				case 1:
+					System.out.print("  ");
+					break;
+					
+				case 2:
+					System.out.print(". ");
+					break;
+					
+				case 99:
+					System.out.print("# ");
+					break;
+				}
+			}
+			System.out.println();
+		}
 	}
 
 

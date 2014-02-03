@@ -23,10 +23,24 @@ public class ____RobotStrategyTemplate__ extends Strategy {
 				while ( !rc.canMove(dir) ) dir = dir.rotateLeft(); 
 
 				while ( true ) { 
+
+					
+					// Spawn a soldier
 					if ( rc.isActive() ) {
-						// Spawn a soldier
-						if ( rc.senseRobotCount()<GameConstants.MAX_ROBOTS ) if ( rc.canMove(dir) ) rc.spawn(dir);
+						if ( rc.senseRobotCount()<GameConstants.MAX_ROBOTS ) {
+							if ( rc.canMove(dir) ) rc.spawn(dir);
+							else {
+								Direction tempDir = dir;
+								do {
+									tempDir = tempDir.rotateRight();
+								} while ( !rc.canMove(tempDir) );
+								rc.spawn(tempDir);
+							}
+						}
 					} 
+					
+					
+					
 					rc.yield();
 				}
 			

@@ -4,7 +4,7 @@ import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotController;
 
-public class NoiseTower___TEMPLATE extends Orders {
+public class NoiseTower___TEMPLATE extends NoiseTower {
 
 	
 	public NoiseTower___TEMPLATE(RobotController in) { super(in); }
@@ -17,7 +17,7 @@ public class NoiseTower___TEMPLATE extends Orders {
 		
 		targetLoc = new MapLocation(dX,dY);
 		if ( debugLevel >= 2 ) System.out.println("[OO]  M: "+myLoc.toString()+"\tT: "+targetLoc.toString()+"\tD: "+myLoc.distanceSquaredTo(targetLoc));
-		rc.attackSquareLight(targetLoc);		
+		rc.attackSquare(targetLoc);		
 	}
 
 }

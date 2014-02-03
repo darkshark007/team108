@@ -3,9 +3,12 @@ package team108.Strategies;
 import team108.Orders.I_Orders;
 import team108.Path.Path;
 import battlecode.common.GameActionException;
+import battlecode.common.GameObject;
 import battlecode.common.MapLocation;
 import battlecode.common.Direction;
+import battlecode.common.Robot;
 import battlecode.common.RobotController;
+import battlecode.common.RobotInfo;
 import battlecode.common.Team;
 
 public abstract class Strategy implements I_RobotStrategy {
@@ -22,6 +25,8 @@ public abstract class Strategy implements I_RobotStrategy {
 	int width;
 	MapLocation HQ;
 	MapLocation eHQ;
+	static boolean EHQAvoid = true;
+	static double EHQAvoidThreshold = 15.0;
 
 
 	public Strategy(RobotController in) {
@@ -49,16 +54,33 @@ public abstract class Strategy implements I_RobotStrategy {
 	// MODIFIED AND REMOVED THE LAST-SPACE CLAUSE.
 	public Direction takeStepTowards(MapLocation in) throws GameActionException {
 
+		MapLocation myLoc = rc.getLocation();
+
+		/*
+		EHQAvoid = true;
+		if ( rc.canSenseSquare(eHQ) ) {
+			RobotInfo rif = rc.senseRobotInfo((Robot)rc.senseObjectAtLocation(eHQ));
+	
+			System.out.println("[;] CAN SENSE!!\t"+rif.actionDelay+"\t"+rif.constructingRounds);
+			if ( rif.actionDelay > EHQAvoidThreshold ) {
+				EHQAvoid = false;
+				System.out.println("[;] Non-avoid EHQ");
+			}
+			else if ( myLoc.distanceSquaredTo(eHQ) <= 25.0 ) {
+				takeStepTowardsWhileAvoiding(in,eHQ);
+			}
+		}
+		*/
+		
 		// Check Straight
 		//rc.setIndicatorString(2, "Direc: "+direc);
-		MapLocation myLoc = rc.getLocation();
 		if ( debugLevel >= 2 ) System.out.print("Taking Step towards:  ("+in.x+","+in.y+")  from  ("+myLoc.x+","+myLoc.y+")");
 
 		Direction dirS = myLoc.directionTo(in);
 
 		// See if i can move straight		
-		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirS) ) {
 			rc.move(dirS);
@@ -69,8 +91,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		// Either there is a robot in the way, or there is a mine.
 		// See if i can move 45 degrees left of straight
 		Direction dirL = dirS.rotateLeft();
-		if ( myLoc.add(dirL).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirL).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirL) ) {
 			rc.move(dirL);
@@ -82,8 +104,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		// Either there is a robot in the way, or there is a mine.
 		// See if i can move 45 degrees right of straight
 		Direction dirR = dirS.rotateRight();
-		if ( myLoc.add(dirR).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirR).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirR) ) {
 			rc.move(dirR);
@@ -104,8 +126,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		// Check 90 degrees in my fixed direction
 		if ( direc == 0 ) dirS = dirLL;
 		else  dirS = dirRR;
-		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirS) ) {
 			rc.move(dirS);
@@ -119,8 +141,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		// Check 135 degrees in my fixed direction
 		if ( direc == 0 ) dirS = dirLLL;
 		else  dirS = dirRRR;
-		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirS) ) {
 			rc.move(dirS);
@@ -138,8 +160,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		// Check 90 degrees in my new fixed direction
 		if ( direc == 0 ) dirS = dirLL;
 		else  dirS = dirRR;
-		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirS) ) {
 			//if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
@@ -154,8 +176,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		// Check 135 degrees in my fixed direction
 		if ( direc == 0 ) dirS = dirLLL;
 		else  dirS = dirRRR;
-		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirS) ) {
 			rc.move(dirS);
@@ -168,8 +190,8 @@ public abstract class Strategy implements I_RobotStrategy {
 		/* */
 
 		dirS = dirLLL.rotateLeft();
-		if ( myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
-			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy :(");
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
 		}
 		else if ( rc.canMove(dirS) ) {
 			rc.move(dirS);
@@ -182,7 +204,188 @@ public abstract class Strategy implements I_RobotStrategy {
 	}
 	/* */
 
+	
+	
+	public Direction takeStepTowardsWhileAvoiding(MapLocation in, MapLocation avoid) throws GameActionException {
 
+		MapLocation myLoc = rc.getLocation();
+		
+		/*
+		EHQAvoid = true;
+		if ( rc.canSenseSquare(eHQ) ) {
+			System.out.println("[;] CAN SENSE!!");
+			RobotInfo rif = rc.senseRobotInfo((Robot)rc.senseObjectAtLocation(eHQ));
+			if ( rif.actionDelay > EHQAvoidThreshold ) {
+				EHQAvoid = false;
+				System.out.println("[;] Non-avoid EHQ");
+			}
+			else if ( myLoc.distanceSquaredTo(eHQ) <= 25.0 ) {
+				takeStepTowardsWhileAvoiding(in,eHQ);
+			}
+		}
+		*/
+
+		
+		Direction av1 = myLoc.directionTo(avoid);
+		Direction av2 = av1.rotateLeft();
+		Direction av3 = av1.rotateRight();
+		
+		// Check Straight
+		//rc.setIndicatorString(2, "Direc: "+direc);
+		if ( debugLevel >= 2 ) System.out.print("Taking Step towards:  ("+in.x+","+in.y+")  from  ("+myLoc.x+","+myLoc.y+") while avoiding "+avoid);
+
+		Direction dirS = myLoc.directionTo(in);
+
+		// See if i can move straight		
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirS).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirS) ) {
+			rc.move(dirS);
+			if ( debugLevel >= 2 ) System.out.println("    By going STRAIGHT");
+			return dirS;	
+		}
+
+		// Either there is a robot in the way, or there is a mine.
+		// See if i can move 45 degrees left of straight
+		Direction dirL = dirS.rotateLeft();
+		if ( EHQAvoid && myLoc.add(dirL).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirL).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirL) ) {
+			rc.move(dirL);
+			if ( debugLevel >= 2 ) System.out.println("    By going LEFT");
+			return dirL;				
+
+		}
+
+		// Either there is a robot in the way, or there is a mine.
+		// See if i can move 45 degrees right of straight
+		Direction dirR = dirS.rotateRight();
+		if ( EHQAvoid && myLoc.add(dirR).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirR).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirR) ) {
+			rc.move(dirR);
+			if ( debugLevel >= 2 ) System.out.println("    By going RIGHT");				
+			return dirR;				
+
+		}
+
+		/* */
+		// Since i cant move in any of the three forward directions, i will try to move at a steeper angle.
+		// I use a fixed direction for this in order to avoid bouncing behavior.  That is, if i am moving 90/135 degrees left of straight, 
+		//   i will continue to move in that direction until that direction becomes inviable.
+		Direction dirLL = dirL.rotateLeft();
+		Direction dirLLL = dirLL.rotateLeft();
+		Direction dirRR = dirR.rotateRight();
+		Direction dirRRR = dirRR.rotateRight();
+
+		// Check 90 degrees in my fixed direction
+		if ( direc == 0 ) dirS = dirLL;
+		else  dirS = dirRR;
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirS).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirS) ) {
+			rc.move(dirS);
+			if ( debugLevel >= 2 ) {
+				if ( direc == 0 ) System.out.println("    By going L,LEFT");
+				else System.out.println("    By going R,RIGHT");
+			}
+			return dirS;				
+		}
+
+		// Check 135 degrees in my fixed direction
+		if ( direc == 0 ) dirS = dirLLL;
+		else  dirS = dirRRR;
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirS).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirS) ) {
+			rc.move(dirS);
+			if ( debugLevel >= 2 ) {
+				if ( direc == 0 ) System.out.println("    By going L,L,LEFT");
+				else System.out.println("    By going R,R,RIGHT");
+			}
+			return dirS;				
+		}
+
+		// If that direction did not work, swap my direction and try that way.
+		direc = 1-direc; // Because direc is initialized at 0, this will always bounce it between 1 and 0
+
+
+		// Check 90 degrees in my new fixed direction
+		if ( direc == 0 ) dirS = dirLL;
+		else  dirS = dirRR;
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirS).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirS) ) {
+			//if ( myLoc.add(dirS).isAdjacentTo(lastSpace) ) direc = 1-direc;
+			rc.move(dirS);
+			if ( debugLevel >= 2 ) {
+				if ( direc == 0 ) System.out.println("    By going L,LEFT");
+				else System.out.println("    By going R,RIGHT");
+			}
+			return dirS;				
+		}
+
+		// Check 135 degrees in my fixed direction
+		if ( direc == 0 ) dirS = dirLLL;
+		else  dirS = dirRRR;
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirS).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirS) ) {
+			rc.move(dirS);
+			if ( debugLevel >= 2 ) {
+				if ( direc == 0 ) System.out.println("    By going L,L,LEFT");
+				else System.out.println("    By going R,R,RIGHT");
+			}
+			return dirS;				
+		}
+		/* */
+
+		dirS = dirLLL.rotateLeft();
+		if ( EHQAvoid && myLoc.add(dirS).distanceSquaredTo(rc.senseEnemyHQLocation()) <= NULL_RADIUS ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the enemy HQ :(");
+		}
+		else if ( myLoc.add(dirS).distanceSquaredTo(avoid) <= 25.0 ) {
+			if ( debugLevel >= 2 ) System.out.println("    But i'd get too close to the avoidance area  :(");
+		}
+		else if ( rc.canMove(dirS) ) {
+			rc.move(dirS);
+			if ( debugLevel >= 2 ) System.out.println("    By going Back");
+			return dirS;				
+		}
+
+		if ( debugLevel >= 2 ) System.out.println("    But i couldn't find a path :(");
+		return null;
+	}
+
+	
 	/**
 	 * Moves the robot to the specified location.  Ensure that the destination is reachable before calling this method, as control of the robot is taken by this method until it reaches its destination
 	 * @param in	The location to move to.
@@ -239,6 +442,7 @@ public abstract class Strategy implements I_RobotStrategy {
 	}
 
 	public static int locToInt(MapLocation m) {
+		if ( m == null ) return -1;
 		return (m.x*100 + m.y);
 	}
 
